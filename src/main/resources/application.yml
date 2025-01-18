@@ -1,0 +1,38 @@
+server:
+  port: 8081
+  # Path prefix
+  servlet:
+    context-path: /api
+spring:
+  application:
+    name: coop-backend
+  # Database
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/coop_db
+    username: root
+    password: YGYin0307
+
+# MyBatis
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: false
+    # Print the log only in dev env
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      logic-delete-field: isDelete
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# Knife4j API Doc
+knife4j:
+  enable: true
+  openapi:
+    title: ApiDoc
+    version: 1.0
+    group:
+      default:
+          api-rule: package
+          api-rule-resources:
+            - com.ygyin.coop.controller
