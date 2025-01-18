@@ -1,0 +1,94 @@
+package com.ygyin.coop.service.impl;
+
+import cn.hutool.core.util.StrUtil;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.ygyin.coop.exception.ErrorCode;
+import com.ygyin.coop.exception.ThrowUtils;
+import com.ygyin.coop.mapper.UserMapper;
+import com.ygyin.coop.model.dto.UserRegisterRequest;
+import com.ygyin.coop.model.entity.User;
+import com.ygyin.coop.model.enums.UserRoleEnum;
+import com.ygyin.coop.service.UserService;
+import org.springframework.stereotype.Service;
+import org.springframework.util.DigestUtils;
+
+
+/**
+ * @author yg
+ * @description 针对表【user(用户)】的数据库操作Service实现
+ * @createDate 2025-01-16 16:10:30
+ */
+@Service
+public class UserServiceImpl extends ServiceImpl<UserMapper, User>
+        implements UserService {
+
+
+    private final String SALT = "yg";
+
+    /**
+     * 用户注册
+     * @param userRegisterRequest 用户注册请求
+     * @return 注册用户 id
+     */
+    @Override
+    public long userRegister(UserRegisterRequest userRegisterRequest) {
+        // 1. 校验请求参数是否为空，长度是否符合标准，确认密码是否一致
+        ThrowUtils.throwIf(userRegisterRequest == null, ErrorCode.PARAMS_ERROR, "注册请求对象为空");
+        // 获取各项属性
+        String userAccount = userRegisterRequest.getUserAccount();
+        String userPassword = userRegisterRequest.getUserPassword();
+        String checkedPassword = userRegisterRequest.getCheckedPassword();
+
+        ThrowUtils.throwIf(StrUtil.hasBlank(userAccount, userPassword, checkedPassword),
+                ErrorCode.PARAMS_ERROR, "注册请求参数为空");
+
+        ThrowUtils.throwIf(userAccount.length() < 3,
+                ErrorCode.PARAMS_ERROR, "用户帐号长度过短");
+
+        ThrowUtils.throwIf(userPassword.length() < 8 || checkedPassword.length() < 8,
+                ErrorCode.PARAMS_ERROR, "密码长度过短");
+
+        ThrowUtils.throwIf(!userPassword.equals(checkedPassword),
+                ErrorCode.PARAMS_ERROR, "密码和确认密码不一致");
+
+        // 2. 检查用于注册的帐号是否和数据库已有帐号重复
+        // 通过 queryWrapper 定义查询条件，使用 baseMapper 应用条件操作数据库返回结果
+        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("userAccount", userAccount);
+        // 符合记录数大于 0 说明帐号已存在
+        long countNum = this.baseMapper.selectCount(queryWrapper);
+        ThrowUtils.throwIf(countNum > 0, ErrorCode.PARAMS_ERROR, "当前帐号已注册");
+
+        // 3. 密码进行加密，不能明文储存
+        String encryptedPassword = getEncryptedPassword(userPassword);
+
+        // 4. 封装新对象写入到数据库中
+        User user = new User();
+        user.setUserName("NoName");
+        user.setUserAccount(userAccount);
+        user.setUserPassword(encryptedPassword);
+        user.setUserRole(UserRoleEnum.USER.getVal());
+
+        boolean isSaved = this.save(user);
+        ThrowUtils.throwIf(!isSaved,ErrorCode.SYSTEM_ERROR,"数据库错误，注册失败");
+
+        // 返回注册用户的 id，MyBatis 已在 save() 中做了主键回填
+        return user.getId();
+    }
+
+    /**
+     * 加密用户密码
+     * @param password 用户密码
+     * @return 加密后的用户密码
+     */
+    @Override
+    public String getEncryptedPassword(String password) {
+        // 加密时加上盐值
+        return DigestUtils.md5DigestAsHex((SALT + password).getBytes());
+    }
+}
+
+
+
+
