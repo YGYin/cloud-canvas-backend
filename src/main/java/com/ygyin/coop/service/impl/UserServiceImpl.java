@@ -38,17 +38,17 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     /**
      * 用户注册
      *
-     * @param userRegisterRequest 用户注册请求
+     * @param registerRequest 用户注册请求
      * @return 注册用户 id
      */
     @Override
-    public long userRegister(UserRegisterRequest userRegisterRequest) {
+    public long userRegister(UserRegisterRequest registerRequest) {
         // 1. 校验请求参数是否为空，长度是否符合标准，确认密码是否一致
-        ThrowUtils.throwIf(userRegisterRequest == null, ErrorCode.PARAMS_ERROR, "注册请求对象为空");
+        ThrowUtils.throwIf(registerRequest == null, ErrorCode.PARAMS_ERROR, "注册请求对象为空");
         // 获取各项属性
-        String userAccount = userRegisterRequest.getUserAccount();
-        String userPassword = userRegisterRequest.getUserPassword();
-        String checkedPassword = userRegisterRequest.getCheckedPassword();
+        String userAccount = registerRequest.getUserAccount();
+        String userPassword = registerRequest.getUserPassword();
+        String checkedPassword = registerRequest.getCheckedPassword();
 
         ThrowUtils.throwIf(StrUtil.hasBlank(userAccount, userPassword, checkedPassword),
                 ErrorCode.PARAMS_ERROR, "注册请求参数为空");
@@ -89,12 +89,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     }
 
     @Override
-    public LoginUserVO userLogin(UserLoginRequest userLoginRequest, HttpServletRequest servletRequest) {
+    public LoginUserVO userLogin(UserLoginRequest loginRequest, HttpServletRequest request) {
         // 1. 校验参数
-        ThrowUtils.throwIf(userLoginRequest == null, ErrorCode.PARAMS_ERROR, "注册请求对象为空");
+        ThrowUtils.throwIf(loginRequest == null, ErrorCode.PARAMS_ERROR, "注册请求对象为空");
         // 获取各项属性
-        String userAccount = userLoginRequest.getUserAccount();
-        String userPassword = userLoginRequest.getUserPassword();
+        String userAccount = loginRequest.getUserAccount();
+        String userPassword = loginRequest.getUserPassword();
 
         ThrowUtils.throwIf(StrUtil.hasBlank(userAccount, userPassword),
                 ErrorCode.PARAMS_ERROR, "登录请求参数为空");
@@ -117,8 +117,24 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         }
 
         // 3. 保存用户的登录状态，并返回脱敏后的用户信息
-        servletRequest.getSession().setAttribute(UserConstant.USER_LOGIN_STATE, selectedUser);
+        request.getSession().setAttribute(UserConstant.USER_LOGIN_STATE, selectedUser);
         return getLoginUserVO(selectedUser);
+    }
+
+    @Override
+    public User getLoginUser(HttpServletRequest request) {
+        // 1. 从 session 中获取 Attribute，获得用户信息判断用户是否登录
+        User curUser = (User) request.getSession().getAttribute(UserConstant.USER_LOGIN_STATE);
+        // 未登录抛业务异常
+        ThrowUtils.throwIf(curUser==null||curUser.getId()==null, ErrorCode.NOT_LOGIN);
+
+        // 2. 已登录，因为 session 中为缓存，应该通过当前用户 id 查数据库获取最新的当前用户
+        curUser = this.getById(curUser.getId());
+        // 为空抛业务异常
+        ThrowUtils.throwIf(curUser==null,ErrorCode.NOT_LOGIN,
+                "获取登录用户失败，数据库中未查询到该用户最新信息");
+
+        return curUser;
     }
 
     /**

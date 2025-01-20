@@ -17,19 +17,26 @@ public interface UserService extends IService<User> {
 
     /**
      * 用户注册
-     * @param userRegisterRequest 用户注册请求
+     * @param registerRequest 用户注册请求
      * @return 注册用户 id
      */
-    long userRegister(UserRegisterRequest userRegisterRequest);
+    long userRegister(UserRegisterRequest registerRequest);
 
 
     /**
      * 用户注册
-     * @param userLoginRequest 用户登录请求
-     * @param servletRequest
+     * @param loginRequest 用户登录请求
+     * @param request
      * @return 已脱敏的用户信息
      */
-    LoginUserVO userLogin(UserLoginRequest userLoginRequest, HttpServletRequest servletRequest);
+    LoginUserVO userLogin(UserLoginRequest loginRequest, HttpServletRequest request);
+
+    /**
+     * 获取登录用户(内部服务)，不直接返回给前端
+     * @param request
+     * @return 用户信息(非VO)
+     */
+    User getLoginUser(HttpServletRequest request);
 
     /**
      * 加密用户密码
