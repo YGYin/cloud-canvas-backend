@@ -1,8 +1,12 @@
 package com.ygyin.coop.service;
 
+import com.ygyin.coop.model.dto.UserLoginRequest;
 import com.ygyin.coop.model.dto.UserRegisterRequest;
 import com.ygyin.coop.model.entity.User;
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.ygyin.coop.model.vo.LoginUserVO;
+
+import javax.servlet.http.HttpServletRequest;
 
 /**
 * @author yg
@@ -20,9 +24,24 @@ public interface UserService extends IService<User> {
 
 
     /**
+     * 用户注册
+     * @param userLoginRequest 用户登录请求
+     * @param servletRequest
+     * @return 已脱敏的用户信息
+     */
+    LoginUserVO userLogin(UserLoginRequest userLoginRequest, HttpServletRequest servletRequest);
+
+    /**
      * 加密用户密码
      * @param password 用户密码
      * @return 加密后的用户密码
      */
     String getEncryptedPassword(String password);
+
+    /**
+     * 将 User 对象转换为 LoginUserVO
+     * @param user 用户对象
+     * @return 已脱敏的用户信息
+     */
+    LoginUserVO getLoginUserVO(User user);
 }
