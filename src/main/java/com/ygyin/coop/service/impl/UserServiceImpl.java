@@ -126,15 +126,29 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         // 1. 从 session 中获取 Attribute，获得用户信息判断用户是否登录
         User curUser = (User) request.getSession().getAttribute(UserConstant.USER_LOGIN_STATE);
         // 未登录抛业务异常
-        ThrowUtils.throwIf(curUser==null||curUser.getId()==null, ErrorCode.NOT_LOGIN);
+        ThrowUtils.throwIf(curUser == null || curUser.getId() == null, ErrorCode.NOT_LOGIN);
 
         // 2. 已登录，因为 session 中为缓存，应该通过当前用户 id 查数据库获取最新的当前用户
         curUser = this.getById(curUser.getId());
         // 为空抛业务异常
-        ThrowUtils.throwIf(curUser==null,ErrorCode.NOT_LOGIN,
+        ThrowUtils.throwIf(curUser == null, ErrorCode.NOT_LOGIN,
                 "获取登录用户失败，数据库中未查询到该用户最新信息");
 
         return curUser;
+    }
+
+    @Override
+    public boolean userLogout(HttpServletRequest request) {
+        // 1. 从 session 中获取 Attribute，获得用户信息判断用户是否登录
+        Object userObject = request.getSession().getAttribute(UserConstant.USER_LOGIN_STATE);
+        // 未登录抛业务异常，为操作错误
+        ThrowUtils.throwIf(userObject == null, ErrorCode.OPERATION_ERROR,
+                "注销失败，当前用户未登录或不存在");
+
+        // 2. 当前用户已登录，移除其登录状态
+        request.getSession().removeAttribute(UserConstant.USER_LOGIN_STATE);
+
+        return true;
     }
 
     /**
@@ -151,12 +165,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
     /**
      * 将 User 对象转换为 LoginUserVO
+     *
      * @param user 用户对象
      * @return 已脱敏的用户信息
      */
     @Override
     public LoginUserVO getLoginUserVO(User user) {
-        if (user==null)
+        if (user == null)
             return null;
 
         LoginUserVO loginUserVO = new LoginUserVO();

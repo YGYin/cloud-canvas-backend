@@ -57,6 +57,12 @@ public class UserController {
         return ResUtils.success(loginUserVO);
     }
 
+    /**
+     * 获取当前的登录用户
+     *
+     * @param request
+     * @return
+     */
     @GetMapping("/get/login")
     public BaseResponse<LoginUserVO> getLoginUser(HttpServletRequest request) {
         // 对请求判空
@@ -69,4 +75,19 @@ public class UserController {
         return ResUtils.success(loginUserVO);
     }
 
+
+    /**
+     * 用户注销(动作)
+     * @param request
+     * @return
+     */
+    @PostMapping()
+    public BaseResponse<Boolean> userLogout(HttpServletRequest request) {
+        // 对请求判空
+        ThrowUtils.throwIf(request == null, ErrorCode.PARAMS_ERROR,
+                "Controller: 用户注销请求失败");
+
+        boolean isLogout = userService.userLogout(request);
+        return ResUtils.success(isLogout);
+    }
 }
