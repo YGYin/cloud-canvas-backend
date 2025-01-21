@@ -1,9 +1,12 @@
-package com.ygyin.coop.model.dto;
+package com.ygyin.coop.model.dto.user;
 
 import lombok.Data;
 
 import java.io.Serializable;
 
+/**
+ * 用户注册请求封装类
+ */
 @Data
 public class UserRegisterRequest implements Serializable {
 
