@@ -10,12 +10,10 @@ import com.ygyin.coop.common.ResUtils;
 import com.ygyin.coop.constant.UserConstant;
 import com.ygyin.coop.exception.ErrorCode;
 import com.ygyin.coop.exception.ThrowUtils;
-import com.ygyin.coop.model.dto.image.ImageEditRequest;
-import com.ygyin.coop.model.dto.image.ImageQueryRequest;
-import com.ygyin.coop.model.dto.image.ImageUpdateRequest;
-import com.ygyin.coop.model.dto.image.ImageUploadRequest;
+import com.ygyin.coop.model.dto.image.*;
 import com.ygyin.coop.model.entity.Image;
 import com.ygyin.coop.model.entity.User;
+import com.ygyin.coop.model.enums.ImageReviewStatusEnum;
 import com.ygyin.coop.model.vo.ImageTagCategory;
 import com.ygyin.coop.model.vo.ImageVO;
 import com.ygyin.coop.service.ImageService;
@@ -60,6 +58,22 @@ public class ImageController {
     }
 
     /**
+     * 通过 URL 上传图片（可重新上传）
+     */
+    @PostMapping("/upload/url")
+    public BaseResponse<ImageVO> uploadImageByUrl(
+            @RequestBody ImageUploadRequest imageUploadRequest,
+            HttpServletRequest request) {
+        // 先获取登录用户，再调用 ImageService 上传图片
+        User loginUser = userService.getLoginUser(request);
+        // 获取文件 url
+        String fileUrl = imageUploadRequest.getUrl();
+        ImageVO imageVO = imageService.uploadImage(fileUrl, imageUploadRequest, loginUser);
+        return ResUtils.success(imageVO);
+    }
+
+
+    /**
      * 删除图片
      */
     @PostMapping("/delete")
@@ -91,7 +105,8 @@ public class ImageController {
      */
     @PostMapping("/update")
     @AuthVerify(requiredRole = UserConstant.ADMIN_ROLE)
-    public BaseResponse<Boolean> updateImage(@RequestBody ImageUpdateRequest imageUpdateRequest) {
+    public BaseResponse<Boolean> updateImage(@RequestBody ImageUpdateRequest imageUpdateRequest,
+                                             HttpServletRequest request) {
         // 请求判空
         ThrowUtils.throwIf(imageUpdateRequest == null || imageUpdateRequest.getId() <= 0,
                 ErrorCode.PARAMS_ERROR, "Controller: 管理员更新图片请求为空");
@@ -105,6 +120,10 @@ public class ImageController {
         Image imgToUpdate = imageService.getById(id);
         ThrowUtils.throwIf(imgToUpdate == null,
                 ErrorCode.NOT_FOUND, "Controller: 更新图片不存在");
+        // 添加审核参数
+        User loginUser = userService.getLoginUser(request);
+        imageService.addReviewParams(image, loginUser);
+
         // 数据库更新图片
         boolean isUpdate = imageService.updateById(image);
         ThrowUtils.throwIf(!isUpdate, ErrorCode.OPERATION_ERROR, "Controller: 未正确更新该图片");
@@ -170,6 +189,10 @@ public class ImageController {
         int pageSize = imageQueryRequest.getPageSize();
         // 对用户分页请求的 pageSize 进行限制，防止其进行爬虫
         ThrowUtils.throwIf(pageSize > 20, ErrorCode.PARAMS_ERROR, "Controller: 非法参数");
+
+        // 对查询结果进行过滤，只允许普通用户查询到审核通过的图片
+        imageQueryRequest.setReviewStatus(ImageReviewStatusEnum.PASS.getVal());
+
         // 分页查询数据库
         Page<Image> imagePage = imageService.page(new Page<Image>(current, pageSize),
                 imageService.getQueryWrapper(imageQueryRequest));
@@ -203,6 +226,8 @@ public class ImageController {
         User loginUser = userService.getLoginUser(request);
         ThrowUtils.throwIf(!imgToEdit.getUserId().equals(loginUser.getId()) && !userService.isAdmin(loginUser),
                 ErrorCode.NO_AUTH, "Controller: 当前用户无权限编辑该图片");
+        // 添加审核参数
+        imageService.addReviewParams(image, loginUser);
 
         // 数据库更新图片
         boolean isEdit = imageService.updateById(image);
@@ -221,5 +246,17 @@ public class ImageController {
         return ResUtils.success(imgTagCategory);
     }
 
+    @PostMapping("/review")
+    @AuthVerify(requiredRole = UserConstant.ADMIN_ROLE)
+    public BaseResponse<Boolean> doImageReview(@RequestBody ImageReviewRequest imageReviewRequest,
+                                               HttpServletRequest request) {
+        ThrowUtils.throwIf(imageReviewRequest == null,
+                ErrorCode.PARAMS_ERROR, "Controller: 审核请求为空");
+
+        // 获取登录用户，调用 service
+        User loginUser = userService.getLoginUser(request);
+        imageService.doImageReview(imageReviewRequest, loginUser);
+        return ResUtils.success(true);
+    }
 
 }
