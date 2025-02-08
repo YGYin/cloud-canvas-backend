@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="generator.mapper.ImageMapper">
+
+    <resultMap id="BaseResultMap" type="generator.domain.Image">
+            <id property="id" column="id" jdbcType="BIGINT"/>
+            <result property="url" column="url" jdbcType="VARCHAR"/>
+            <result property="name" column="name" jdbcType="VARCHAR"/>
+            <result property="intro" column="intro" jdbcType="VARCHAR"/>
+            <result property="category" column="category" jdbcType="VARCHAR"/>
+            <result property="tags" column="tags" jdbcType="VARCHAR"/>
+            <result property="imgSize" column="imgSize" jdbcType="BIGINT"/>
+            <result property="imgWidth" column="imgWidth" jdbcType="INTEGER"/>
+            <result property="imgHeight" column="imgHeight" jdbcType="INTEGER"/>
+            <result property="imgScale" column="imgScale" jdbcType="DOUBLE"/>
+            <result property="imgFormat" column="imgFormat" jdbcType="VARCHAR"/>
+            <result property="userId" column="userId" jdbcType="BIGINT"/>
+            <result property="createTime" column="createTime" jdbcType="TIMESTAMP"/>
+            <result property="editTime" column="editTime" jdbcType="TIMESTAMP"/>
+            <result property="updateTime" column="updateTime" jdbcType="TIMESTAMP"/>
+            <result property="isDelete" column="isDelete" jdbcType="TINYINT"/>
+            <result property="reviewStatus" column="reviewStatus" jdbcType="INTEGER"/>
+            <result property="reviewMsg" column="reviewMsg" jdbcType="VARCHAR"/>
+            <result property="reviewerId" column="reviewerId" jdbcType="BIGINT"/>
+            <result property="reviewTime" column="reviewTime" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,url,name,
+        intro,category,tags,
+        imgSize,imgWidth,imgHeight,
+        imgScale,imgFormat,userId,
+        createTime,editTime,updateTime,
+        isDelete,reviewStatus,reviewMsg,
+        reviewerId,reviewTime
+    </sql>
+</mapper>
