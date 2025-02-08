@@ -3,6 +3,7 @@ package com.ygyin.coop.service;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ygyin.coop.model.dto.image.ImageQueryRequest;
+import com.ygyin.coop.model.dto.image.ImageReviewRequest;
 import com.ygyin.coop.model.dto.image.ImageUploadRequest;
 import com.ygyin.coop.model.entity.Image;
 import com.baomidou.mybatisplus.extension.service.IService;
@@ -13,23 +14,24 @@ import org.springframework.web.multipart.MultipartFile;
 import javax.servlet.http.HttpServletRequest;
 
 /**
-* @author yg
-* @description 针对表【image(图片)】的数据库操作Service
-* @createDate 2025-01-29 17:07:54
-*/
+ * @author yg
+ * @description 针对表【image(图片)】的数据库操作Service
+ * @createDate 2025-01-29 17:07:54
+ */
 public interface ImageService extends IService<Image> {
 
     /**
      * 上传图片
      *
-     * @param multipartFile 原始文件
+     * @param inputSource        输入源文件(图片文件 / url)
      * @param imageUploadRequest 图片上传请求封装类
-     * @param loginUser 用户
+     * @param loginUser          用户
      * @return
      */
-    ImageVO uploadImage(MultipartFile multipartFile,
+    ImageVO uploadImage(Object inputSource,
                         ImageUploadRequest imageUploadRequest,
                         User loginUser);
+
 
     /**
      * 根据查询图片的请求构造查询条件
@@ -38,7 +40,6 @@ public interface ImageService extends IService<Image> {
      * @return
      */
     public QueryWrapper<Image> getQueryWrapper(ImageQueryRequest imageQueryRequest);
-
 
 
     /**
@@ -66,4 +67,19 @@ public interface ImageService extends IService<Image> {
      */
     public void verifyImage(Image image);
 
+    /**
+     * 图片审核
+     *
+     * @param imageReviewRequest
+     * @param loginUser
+     */
+    void doImageReview(ImageReviewRequest imageReviewRequest, User loginUser);
+
+    /**
+     * 为上传，编辑，更新等操作的 image 对象添加审核参数
+     *
+     * @param image
+     * @param loginUser
+     */
+    void addReviewParams(Image image, User loginUser);
 }

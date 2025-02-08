@@ -9,17 +9,22 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ygyin.coop.exception.ErrorCode;
 import com.ygyin.coop.exception.ThrowUtils;
 import com.ygyin.coop.manager.FileManager;
+import com.ygyin.coop.manager.upload.FileImageUpload;
+import com.ygyin.coop.manager.upload.ImageUploadTemplate;
+import com.ygyin.coop.manager.upload.UrlImageUpload;
 import com.ygyin.coop.model.dto.file.UploadImageResult;
 import com.ygyin.coop.model.dto.image.ImageQueryRequest;
+import com.ygyin.coop.model.dto.image.ImageReviewRequest;
 import com.ygyin.coop.model.dto.image.ImageUploadRequest;
 import com.ygyin.coop.model.entity.Image;
 import com.ygyin.coop.model.entity.User;
+import com.ygyin.coop.model.enums.ImageReviewStatusEnum;
 import com.ygyin.coop.model.vo.ImageVO;
 import com.ygyin.coop.service.ImageService;
 import com.ygyin.coop.mapper.ImageMapper;
 import com.ygyin.coop.service.UserService;
+import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
@@ -39,7 +44,10 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
         implements ImageService {
 
     @Resource
-    private FileManager fileManager;
+    private FileImageUpload fileImageUpload;
+
+    @Resource
+    private UrlImageUpload urlImageUpload;
 
     @Resource
     private UserService userService;
@@ -47,28 +55,42 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
     /**
      * 上传图片
      *
-     * @param multipartFile      原始文件
+     * @param inputSource        输入源文件(图片文件 / url)
      * @param imageUploadRequest 图片上传请求封装类
      * @param loginUser          用户
      * @return
      */
     @Override
-    public ImageVO uploadImage(MultipartFile multipartFile, ImageUploadRequest imageUploadRequest, User loginUser) {
+    public ImageVO uploadImage(Object inputSource, ImageUploadRequest imageUploadRequest, User loginUser) {
         // 1. 校验用户是否为空
         ThrowUtils.throwIf(loginUser == null, ErrorCode.NO_AUTH);
         // 2. 判断是新增还是更新，如果是更新需要根据 imageId 判断图片是否为空
         Long imgId = null;
         if (imageUploadRequest != null)
             imgId = imageUploadRequest.getId();
-        // 校验图片 id 是否为空，不为空为更新操作，看数据库中是否存在该 id 的图片
+
+        // 如果是更新图片，需要校验图片是否存在，及是否为本人或管理员编辑图片
         if (imgId != null) {
-            boolean isExist = this.lambdaQuery().eq(Image::getId, imgId).exists();
-            ThrowUtils.throwIf(!isExist, ErrorCode.NOT_FOUND, "更新的图片不存在");
+            Image oldImage = this.getById(imgId);
+            ThrowUtils.throwIf(oldImage == null,
+                    ErrorCode.NOT_FOUND, "Service: 原图片不存在");
+            // 仅本人或管理员可编辑
+            ThrowUtils.throwIf(!oldImage.getUserId().equals(loginUser.getId())
+                            && !userService.isAdmin(loginUser),
+                    ErrorCode.NO_AUTH, "Service: 仅本人或管理员可编辑原图片");
         }
+
         // 3. 上传图片，先根据用户 id 或名称构造上传后的路径，通过返回的上传结果得到图片信息
         // todo: 可改为名字
         String pathPrefix = String.format("public/%s", loginUser.getId());
-        UploadImageResult uploadImgResult = fileManager.uploadImage(multipartFile, pathPrefix);
+
+        // 根据上传文件的类型，来区分上传文件的方式
+        // 默认为文件类型，但如果上传的为 String 类型，说明为 url
+        ImageUploadTemplate imageUploadTemplate = fileImageUpload;
+        if (inputSource instanceof String)
+            imageUploadTemplate = urlImageUpload;
+        // 上传图片文件或 url
+        UploadImageResult uploadImgResult = imageUploadTemplate.uploadImage(inputSource, pathPrefix);
 
         // 4. 根据图片信息构造 ImageVO
         Image image = new Image();
@@ -81,6 +103,9 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
         image.setImgScale(uploadImgResult.getImgScale());
         image.setImgFormat(uploadImgResult.getImgFormat());
         image.setUserId(loginUser.getId());
+        // 添加审核参数
+        this.addReviewParams(image, loginUser);
+
         // 如果 imageId 不为空，表示为更新，否则为新增图片
         if (imgId != null) {
             image.setId(imgId);
@@ -114,6 +139,10 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
         Long userId = imageQueryRequest.getUserId();
         String sortField = imageQueryRequest.getSortField();
         String sortOrder = imageQueryRequest.getSortOrder();
+        // 获取图片审核相关属性
+        Integer reviewStatus = imageQueryRequest.getReviewStatus();
+        String reviewMsg = imageQueryRequest.getReviewMsg();
+        Long reviewerId = imageQueryRequest.getReviewerId();
 
         // 3. 新建 QueryWrapper，根据 searchText 搜索图片名称和简介
         QueryWrapper<Image> queryWrapper = new QueryWrapper<>();
@@ -137,6 +166,9 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
         queryWrapper.eq(ObjectUtil.isNotEmpty(imgSize), "imgSize", imgSize);
         queryWrapper.eq(ObjectUtil.isNotEmpty(imgScale), "imgScale", imgScale);
 
+        queryWrapper.eq(ObjectUtil.isNotEmpty(reviewStatus), "reviewStatus", reviewStatus);
+        queryWrapper.like(StrUtil.isNotBlank(reviewMsg), "reviewMsg", reviewMsg);
+        queryWrapper.eq(ObjectUtil.isNotEmpty(reviewerId), "reviewerId", reviewerId);
         // tags 使用 Json 数组查询
         if (CollUtil.isNotEmpty(tags))
             for (String tag : tags)
@@ -183,7 +215,7 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
             Long userId = imageVO.getUserId();
             User user = null;
             if (idToUserListMap.containsKey(userId))
-                user=idToUserListMap.get(userId).get(0);
+                user = idToUserListMap.get(userId).get(0);
 
             imageVO.setUserVO(userService.getUserVO(user));
         });
@@ -206,6 +238,49 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
         String intro = image.getIntro();
         ThrowUtils.throwIf(StrUtil.isNotBlank(intro) && intro.length() > 1024,
                 ErrorCode.PARAMS_ERROR, "Service: intro 长度过长");
+    }
+
+
+    @Override
+    public void doImageReview(ImageReviewRequest imageReviewRequest, User loginUser) {
+        // 1. 获得 id 和审核请求中的状态，校验参数
+        Long id = imageReviewRequest.getId();
+        Integer reviewStatus = imageReviewRequest.getReviewStatus();
+        ImageReviewStatusEnum reviewStatusEnum = ImageReviewStatusEnum.getEnumByVal(reviewStatus);
+
+        ThrowUtils.throwIf(id == null ||
+                        reviewStatusEnum == null ||
+                        ImageReviewStatusEnum.IN_REVIEW.equals(reviewStatusEnum),
+                ErrorCode.PARAMS_ERROR, "Service: 更新审核状态请求为空");
+
+        // 2. 判断图片是否存在
+        Image oldImage = this.getById(id);
+        ThrowUtils.throwIf(oldImage == null, ErrorCode.NOT_FOUND);
+        // 3. 校验审核状态如果已经是该状态
+        ThrowUtils.throwIf(oldImage.getReviewStatus().equals(reviewStatus),
+                ErrorCode.PARAMS_ERROR, "Service: 请勿重复审核");
+
+        // 4. 新建 image 对象，更新审核状态
+        Image imageToUpdateStatus = new Image();
+        BeanUtils.copyProperties(imageReviewRequest, imageToUpdateStatus);
+        imageToUpdateStatus.setReviewerId(loginUser.getId());
+        imageToUpdateStatus.setReviewTime(new Date());
+
+        boolean isUpdateReview = this.updateById(imageToUpdateStatus);
+        ThrowUtils.throwIf(!isUpdateReview, ErrorCode.OPERATION_ERROR, "Service: 图片更新审核状态不成功");
+    }
+
+    @Override
+    public void addReviewParams(Image image, User loginUser) {
+        if (userService.isAdmin(loginUser)) {
+            // 管理员则直接过审，填充完整审核相关属性参数
+            image.setReviewStatus(ImageReviewStatusEnum.PASS.getVal());
+            image.setReviewerId(loginUser.getId());
+            image.setReviewMsg("管理员自动过审");
+            image.setReviewTime(new Date());
+        } else
+            // 非管理员，请求创建或编辑图片时，image 的状态改为待审核
+            image.setReviewStatus(ImageReviewStatusEnum.IN_REVIEW.getVal());
     }
 
 
