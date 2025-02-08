@@ -9,15 +9,15 @@ import lombok.Getter;
 @Getter
 public enum UserRoleEnum {
 
-    USER("普通用户","user"),
+    USER("普通用户", "user"),
     ADMIN("管理员", "admin");
 
     private final String roleText;
     private final String val;
 
-    UserRoleEnum(String roleText, String val){
-        this.roleText=roleText;
-        this.val =val;
+    UserRoleEnum(String roleText, String val) {
+        this.roleText = roleText;
+        this.val = val;
     }
 
     /**
