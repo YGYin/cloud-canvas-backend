@@ -5,7 +5,9 @@ import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.NumberUtil;
 import cn.hutool.core.util.RandomUtil;
 import com.qcloud.cos.model.PutObjectResult;
+import com.qcloud.cos.model.ciModel.persistence.CIObject;
 import com.qcloud.cos.model.ciModel.persistence.ImageInfo;
+import com.qcloud.cos.model.ciModel.persistence.ProcessResults;
 import com.ygyin.coop.config.CosClientConfig;
 import com.ygyin.coop.exception.BusinessException;
 import com.ygyin.coop.exception.ErrorCode;
@@ -31,12 +33,6 @@ public abstract class ImageUploadTemplate {
 
     @Resource
     private CosManager cosManager;
-
-    private static final long ONE_M = 1024 * 1024L;
-
-    private static final List<String> ALLOW_UPLOAD_FORMAT = Arrays.asList("jpg", "jpeg", "png", "webp");
-
-    private static final List<String> ALLOW_CONTENT_TYPES = Arrays.asList("image/jpeg", "image/jpg", "image/png", "image/webp");
 
     /**
      * 上传图片
@@ -69,10 +65,24 @@ public abstract class ImageUploadTemplate {
             PutObjectResult putImgResult = cosManager.putImageObject(uploadPath, file);
             ImageInfo imgInfo = putImgResult.getCiUploadResult().getOriginalInfo().getImageInfo();
 
+            // 从上传结果中去获取图片根据规则处理的结果
+            ProcessResults processResults = putImgResult.getCiUploadResult().getProcessResults();
+            List<CIObject> processedObjList = processResults.getObjectList();
+            if (!processedObjList.isEmpty()) {
+                // 获取根据第一个规则(压缩转换为 webp)后的文件信息，第二个为缩略图的文件信息
+                CIObject compressedCiObj = processedObjList.get(0);
+                // 如果图片本身较小，没有根据规则 2 生成缩略图，默认使用 webo
+                CIObject thumbObj = compressedCiObj;
+                if (processedObjList.size() > 1)
+                    thumbObj = processedObjList.get(1);
+
+                return buildUploadResult(originName, compressedCiObj, thumbObj);
+            }
+
             // 5. 从中取出图片信息，封装返回结果
             return buildUploadResult(imgInfo, uploadPath, originName, file);
         } catch (Exception e) {
-            log.error("FileManager: 图片上传到 COS 失败", e);
+            log.error("ImageUploadTemplate: 图片上传到 COS 失败", e);
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "FileManager: 图片上传失败");
         } finally {
             //6. 清理临时文件
@@ -82,11 +92,41 @@ public abstract class ImageUploadTemplate {
     }
 
     /**
+     * 封装得到图片上传结果
+     *
+     * @param originName      原始文件名
+     * @param compressedCiObj 压缩为 webp 的文件对象
+     * @param thumbCiObj      缩略图对象
+     * @return
+     */
+    private UploadImageResult buildUploadResult(String originName,
+                                                CIObject compressedCiObj,
+                                                CIObject thumbCiObj) {
+        // 需要将上传结果返回给调用方，封装 UploadImageResult 包装类
+        UploadImageResult uploadImgResult = new UploadImageResult();
+        int imgWidth = compressedCiObj.getWidth();
+        int imgHeight = compressedCiObj.getHeight();
+        double imgScale = NumberUtil.round(imgWidth * 1.0 / imgHeight, 2).doubleValue();
+        // 设置 webp 图地址以及 缩略图地址
+        uploadImgResult.setUrl(cosClientConfig.getHost() + "/" + compressedCiObj.getKey());
+        uploadImgResult.setThumbUrl(cosClientConfig.getHost() + "/" + thumbCiObj.getKey());
+
+        uploadImgResult.setName(FileUtil.mainName(originName));
+        uploadImgResult.setImgSize(compressedCiObj.getSize().longValue());
+        uploadImgResult.setImgWidth(imgWidth);
+        uploadImgResult.setImgHeight(imgHeight);
+        uploadImgResult.setImgScale(imgScale);
+        uploadImgResult.setImgFormat(compressedCiObj.getFormat());
+
+        return uploadImgResult;
+    }
+
+    /**
      * 封装返回结果
      *
      * @param imgInfo
      * @param uploadPath
-     * @param originName
+     * @param originName 原始文件名
      * @param file
      * @return
      */
@@ -109,6 +149,7 @@ public abstract class ImageUploadTemplate {
 
     /**
      * 将输入源生成本地临时文件
+     *
      * @param inputSource
      * @param file
      */
@@ -135,7 +176,7 @@ public abstract class ImageUploadTemplate {
             return;
         boolean isDelete = file.delete();
         if (!isDelete)
-            log.error("File Controller: 文件删除失败，filepath = {}", file.getAbsolutePath());
+            log.error("ImageUploadTemplate: 文件删除失败，filepath = {}", file.getAbsolutePath());
     }
 
 
