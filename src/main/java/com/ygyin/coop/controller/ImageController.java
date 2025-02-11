@@ -259,4 +259,17 @@ public class ImageController {
         return ResUtils.success(true);
     }
 
+    @PostMapping("/upload/fetch")
+    @AuthVerify(requiredRole = UserConstant.ADMIN_ROLE)
+    public BaseResponse<Integer> uploadImageByFetch(@RequestBody ImageFetchRequest imageFetchRequest,
+                                                    HttpServletRequest request) {
+        ThrowUtils.throwIf(imageFetchRequest == null,
+                ErrorCode.PARAMS_ERROR, "Controller: 抓取图片请求为空");
+
+        // 获取登录用户，调用 service
+        User loginUser = userService.getLoginUser(request);
+        Integer successFetchNum = imageService.uploadImageByFetch(imageFetchRequest, loginUser);
+        return ResUtils.success(successFetchNum);
+    }
+
 }
