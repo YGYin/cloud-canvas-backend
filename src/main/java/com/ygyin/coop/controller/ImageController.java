@@ -1,8 +1,11 @@
 package com.ygyin.coop.controller;
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.util.RandomUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.ygyin.coop.annotation.AuthVerify;
 import com.ygyin.coop.common.BaseResponse;
 import com.ygyin.coop.common.DeleteRequest;
@@ -19,15 +22,18 @@ import com.ygyin.coop.model.vo.ImageVO;
 import com.ygyin.coop.service.ImageService;
 import com.ygyin.coop.service.UserService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.util.DigestUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
-import java.io.File;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/image")
@@ -39,6 +45,17 @@ public class ImageController {
 
     @Resource
     private ImageService imageService;
+
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
+
+    private final Cache<String, String> LOCAL_CACHE =
+            Caffeine.newBuilder().initialCapacity(1024)
+                    .maximumSize(10000L)
+                    // 缓存 5 分钟移除
+                    .expireAfterWrite(5L, TimeUnit.MINUTES)
+                    .build();
+
 
     /**
      * 上传图片
@@ -97,6 +114,8 @@ public class ImageController {
         // 数据库删除该图片
         boolean isDelete = imageService.removeById(id);
         ThrowUtils.throwIf(!isDelete, ErrorCode.OPERATION_ERROR, "Controller: 未正确删除该图片");
+        // 清理 COS 中的图片资源
+        imageService.removeImageFileOnCOS(imgToDelete);
         return ResUtils.success(true);
     }
 
@@ -199,6 +218,58 @@ public class ImageController {
 
         // 转为 VO Page 返回
         return ResUtils.success(imageService.getImageVOPage(imagePage, request));
+    }
+
+    /**
+     * 通过缓存分页获取图片列表（封装类）
+     */
+    @PostMapping("/list/page/vo/cache")
+    public BaseResponse<Page<ImageVO>> listImageVOByPageWithCache(@RequestBody ImageQueryRequest imageQueryRequest,
+                                                                  HttpServletRequest request) {
+        // 获取 current 和 size
+        int current = imageQueryRequest.getCurrentPage();
+        int pageSize = imageQueryRequest.getPageSize();
+        // 对用户分页请求的 pageSize 进行限制，防止其进行爬虫
+        ThrowUtils.throwIf(pageSize > 20, ErrorCode.PARAMS_ERROR, "Controller: 非法参数");
+
+        // 对查询结果进行过滤，只允许普通用户查询到审核通过的图片
+        imageQueryRequest.setReviewStatus(ImageReviewStatusEnum.PASS.getVal());
+
+        // 1. 先通过本地及 redis 缓存来查询，构建缓存的 key，将序列化后经过 md5 压缩的查询条件作为 key
+        String query = JSONUtil.toJsonStr(imageQueryRequest);
+        String hashKey = DigestUtils.md5DigestAsHex(query.getBytes());
+        String key = "coop:listImageVOByPage:" + hashKey;
+        // 1.1 从本地缓存中查询，如果本地缓存命中，反序列化返回结果
+        String valInCache = LOCAL_CACHE.getIfPresent(key);
+        if (valInCache != null) {
+            Page<ImageVO> pageInCache = JSONUtil.toBean(valInCache, Page.class);
+            return ResUtils.success(pageInCache);
+        }
+        // 2. 本地缓存没命中，查 redis
+        ValueOperations<String, String> valOps = stringRedisTemplate.opsForValue();
+        valInCache = valOps.get(key);
+        // 如果缓存命中，更新本地缓存后，反序列化后直接返回结果
+        if (valInCache != null) {
+            LOCAL_CACHE.put(key,valInCache);
+            Page<ImageVO> pageInCache = JSONUtil.toBean(valInCache, Page.class);
+            return ResUtils.success(pageInCache);
+        }
+
+        // 3. 没有命中，分页查询数据库，序列化后并存入本地和 redis 缓存
+        Page<Image> imagePage = imageService.page(new Page<Image>(current, pageSize),
+                imageService.getQueryWrapper(imageQueryRequest));
+        // 获取分页封装类
+        Page<ImageVO> imageVOPage = imageService.getImageVOPage(imagePage, request);
+        // 3.1 更新 redis 缓存
+        String valToCache = JSONUtil.toJsonStr(imageVOPage);
+        // 设置随机过期时间，防止缓存雪崩，即使查询结果是空也会设置到缓存中，避免缓存穿透
+        int timeout = 60 + RandomUtil.randomInt(0, 120);
+        valOps.set(key, valToCache, timeout, TimeUnit.SECONDS);
+
+        // 3.2 写入本地缓存
+        LOCAL_CACHE.put(key,valToCache);
+        // 转为 VO Page 返回
+        return ResUtils.success(imageVOPage);
     }
 
 
