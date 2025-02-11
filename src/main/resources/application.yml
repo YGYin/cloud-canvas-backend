@@ -12,6 +12,9 @@ spring:
     url: jdbc:mysql://localhost:3306/coop_db
     username: root
     password: YGYin0307
+  # 配置选择
+#  profiles:
+#    active: local
 
 # MyBatis
 mybatis-plus:
