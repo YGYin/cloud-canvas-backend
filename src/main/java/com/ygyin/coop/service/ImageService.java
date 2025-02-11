@@ -2,6 +2,7 @@ package com.ygyin.coop.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.ygyin.coop.model.dto.image.ImageFetchRequest;
 import com.ygyin.coop.model.dto.image.ImageQueryRequest;
 import com.ygyin.coop.model.dto.image.ImageReviewRequest;
 import com.ygyin.coop.model.dto.image.ImageUploadRequest;
@@ -9,7 +10,6 @@ import com.ygyin.coop.model.entity.Image;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.ygyin.coop.model.entity.User;
 import com.ygyin.coop.model.vo.ImageVO;
-import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletRequest;
 
@@ -82,4 +82,19 @@ public interface ImageService extends IService<Image> {
      * @param loginUser
      */
     void addReviewParams(Image image, User loginUser);
+
+    /**
+     * 批量抓取和创建图片
+     *
+     * @param imageFetchRequest
+     * @param loginUser
+     * @return 成功抓取上传的图片数
+     */
+    Integer uploadImageByFetch(ImageFetchRequest imageFetchRequest, User loginUser);
+
+    /**
+     * 删除对象存储中的图片文件
+     * @param oldImage
+     */
+    void removeImageFileOnCOS(Image oldImage);
 }

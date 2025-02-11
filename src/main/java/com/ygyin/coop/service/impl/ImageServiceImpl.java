@@ -1,18 +1,21 @@
 package com.ygyin.coop.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.ygyin.coop.exception.BusinessException;
 import com.ygyin.coop.exception.ErrorCode;
 import com.ygyin.coop.exception.ThrowUtils;
-import com.ygyin.coop.manager.FileManager;
+import com.ygyin.coop.manager.CosManager;
 import com.ygyin.coop.manager.upload.FileImageUpload;
 import com.ygyin.coop.manager.upload.ImageUploadTemplate;
 import com.ygyin.coop.manager.upload.UrlImageUpload;
 import com.ygyin.coop.model.dto.file.UploadImageResult;
+import com.ygyin.coop.model.dto.image.ImageFetchRequest;
 import com.ygyin.coop.model.dto.image.ImageQueryRequest;
 import com.ygyin.coop.model.dto.image.ImageReviewRequest;
 import com.ygyin.coop.model.dto.image.ImageUploadRequest;
@@ -23,11 +26,18 @@ import com.ygyin.coop.model.vo.ImageVO;
 import com.ygyin.coop.service.ImageService;
 import com.ygyin.coop.mapper.ImageMapper;
 import com.ygyin.coop.service.UserService;
+import lombok.extern.slf4j.Slf4j;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 import org.springframework.beans.BeanUtils;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
+import java.io.IOException;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +49,7 @@ import java.util.stream.Collectors;
  * @description 针对表【image(图片)】的数据库操作Service实现
  * @createDate 2025-01-29 17:07:54
  */
+@Slf4j
 @Service
 public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
         implements ImageService {
@@ -51,6 +62,9 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
 
     @Resource
     private UserService userService;
+
+    @Resource
+    private CosManager cosManager;
 
     /**
      * 上传图片
@@ -94,9 +108,14 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
 
         // 4. 根据图片信息构造 ImageVO
         Image image = new Image();
-
         image.setUrl(uploadImgResult.getUrl());
-        image.setName(uploadImgResult.getName());
+        image.setThumbUrl(uploadImgResult.getThumbUrl());
+        String imgName = uploadImgResult.getName();
+        // 如果是抓取图片传入的 upload request，检查请求中用于前缀命名的图片名是否为空
+        if (imageUploadRequest != null && StrUtil.isNotBlank(imageUploadRequest.getImgName()))
+            imgName = imageUploadRequest.getImgName();
+        image.setName(imgName);
+
         image.setImgSize(uploadImgResult.getImgSize());
         image.setImgWidth(uploadImgResult.getImgWidth());
         image.setImgHeight(uploadImgResult.getImgHeight());
@@ -114,6 +133,8 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
 
         // 5. 保存或更新数据库，返回 ImageVO
         boolean isSaveOrUpdate = this.saveOrUpdate(image);
+        // todo 如果是更新图片可删除 COS 中原图片
+        // imageService.removeImageFileOnCOS(imgToUpdate);
         ThrowUtils.throwIf(!isSaveOrUpdate, ErrorCode.OPERATION_ERROR, "当前图片上传失败");
         return ImageVO.objToVo(image);
     }
@@ -283,6 +304,88 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
             image.setReviewStatus(ImageReviewStatusEnum.IN_REVIEW.getVal());
     }
 
+    @Override
+    public Integer uploadImageByFetch(ImageFetchRequest imageFetchRequest, User loginUser) {
+        // 1. 校验请求参数
+        String searchText = imageFetchRequest.getSearchText();
+        Integer fetchNum = imageFetchRequest.getFetchNum();
+        ThrowUtils.throwIf(fetchNum > 30, ErrorCode.PARAMS_ERROR, "Service: 最多一次性抓取 30 条");
+        String namePrefix = imageFetchRequest.getNamePrefix();
+        if (namePrefix.isEmpty())
+            namePrefix = searchText;
+
+
+        // 2. 获取要抓取图片的地址
+        String urlToFetch = String.format("https://cn.bing.com/images/async?q=%s&mmasync=1", searchText);
+        // 3. 使用 jsoup 对抓取地址发送请求
+        Document doc;
+        try {
+            doc = Jsoup.connect(urlToFetch).get();
+        } catch (IOException e) {
+            log.error("获取页面失败", e);
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "Service: 抓取页面失败");
+        }
+
+        // 4. 对获取的页面获取对应的图片 url 元素，获得 元素 list
+        Element divElement = doc.getElementsByClass("dgControl").first();
+        ThrowUtils.throwIf(ObjUtil.isNull(divElement),
+                ErrorCode.OPERATION_ERROR, "Service: 抓取元素失败");
+
+        Elements imgElements = divElement.select("img.mimg");
+        int successNum = 0;
+
+        // 5. 遍历元素 list 获取每张图片的 url，并对图片 url 进行处理，避免转义问题
+        for (Element imgElem : imgElements) {
+            String imgUrl = imgElem.attr("src");
+            if (StrUtil.isBlank(imgUrl)) {
+                log.info("该图片链接为空，已跳过: {}", imgUrl);
+                continue;
+            }
+            // 对图片 url 中带的 '?' 进行处理，避免转义问题
+            int questionIndex = imgUrl.indexOf("?");
+            if (questionIndex > -1)
+                imgUrl = imgUrl.substring(0, questionIndex);
+
+            // 上传图片，构造文件名
+            ImageUploadRequest imageUploadRequest = new ImageUploadRequest();
+            imageUploadRequest.setUrl(imgUrl);
+            imageUploadRequest.setImgName(namePrefix + (successNum + 1));
+            try {
+                // imageUploadRequest 用于判断是否已经有该图片，并用于构造上传文件名
+                ImageVO imageVO = this.uploadImage(imgUrl, imageUploadRequest, loginUser);
+                log.info("图片上传成功, id = {}", imageVO.getId());
+                successNum++;
+            } catch (Exception e) {
+                log.error("图片上传失败", e);
+                continue;
+            }
+            if (successNum >= fetchNum)
+                break;
+        }
+
+        return successNum;
+    }
+
+    @Async
+    @Override
+    public void removeImageFileOnCOS(Image oldImage) {
+        // 判断该图片是否被多条记录使用
+        String imgUrl = oldImage.getUrl();
+        long count = this.lambdaQuery()
+                .eq(Image::getUrl, imgUrl)
+                .count();
+        // 有不止一条记录引用该图片 不清理
+        if (count > 1)
+            return;
+
+        // 此处 url 包含了域名，实际上只要传 key 值（存储路径）就够了
+        cosManager.deleteObject(oldImage.getUrl());
+        // 清理缩略图
+        String thumbUrl = oldImage.getThumbUrl();
+        if (!thumbUrl.isEmpty())
+            cosManager.deleteObject(thumbUrl);
+
+    }
 
 }
 
