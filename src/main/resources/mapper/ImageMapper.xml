@@ -18,6 +18,7 @@
             <result property="imgScale" column="imgScale" jdbcType="DOUBLE"/>
             <result property="imgFormat" column="imgFormat" jdbcType="VARCHAR"/>
             <result property="userId" column="userId" jdbcType="BIGINT"/>
+            <result property="areaId" column="areaId" jdbcType="BIGINT"/>
             <result property="createTime" column="createTime" jdbcType="TIMESTAMP"/>
             <result property="editTime" column="editTime" jdbcType="TIMESTAMP"/>
             <result property="updateTime" column="updateTime" jdbcType="TIMESTAMP"/>
@@ -32,7 +33,7 @@
         id,url,thumbUrl,name,
         intro,category,tags,
         imgSize,imgWidth,imgHeight,
-        imgScale,imgFormat,userId,
+        imgScale,imgFormat,userId,areaId,
         createTime,editTime,updateTime,
         isDelete,reviewStatus,reviewMsg,
         reviewerId,reviewTime

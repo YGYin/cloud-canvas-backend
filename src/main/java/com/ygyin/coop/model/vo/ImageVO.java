@@ -81,6 +81,11 @@ public class ImageVO implements Serializable {
     private Long userId;
 
     /**
+     * 个人空间 id
+     */
+    private Long areaId;
+
+    /**
      * 创建时间
      */
     private Date createTime;
@@ -134,8 +139,6 @@ public class ImageVO implements Serializable {
 
         return image;
     }
-
-
 
 
 }
