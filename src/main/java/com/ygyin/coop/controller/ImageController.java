@@ -14,11 +14,13 @@ import com.ygyin.coop.constant.UserConstant;
 import com.ygyin.coop.exception.ErrorCode;
 import com.ygyin.coop.exception.ThrowUtils;
 import com.ygyin.coop.model.dto.image.*;
+import com.ygyin.coop.model.entity.Area;
 import com.ygyin.coop.model.entity.Image;
 import com.ygyin.coop.model.entity.User;
 import com.ygyin.coop.model.enums.ImageReviewStatusEnum;
 import com.ygyin.coop.model.vo.ImageTagCategory;
 import com.ygyin.coop.model.vo.ImageVO;
+import com.ygyin.coop.service.AreaService;
 import com.ygyin.coop.service.ImageService;
 import com.ygyin.coop.service.UserService;
 import lombok.extern.slf4j.Slf4j;
@@ -45,6 +47,9 @@ public class ImageController {
 
     @Resource
     private ImageService imageService;
+
+    @Resource
+    private AreaService areaService;
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
@@ -102,20 +107,8 @@ public class ImageController {
                 ErrorCode.PARAMS_ERROR, "Controller: 删除图片请求为空");
         // 判断删除的图片是否存在
         Long id = deleteRequest.getId();
-        Image imgToDelete = imageService.getById(id);
-        ThrowUtils.throwIf(imgToDelete == null,
-                ErrorCode.NOT_FOUND, "Controller: 删除的图片不存在");
-
-        // 校验权限，只有上传该图片的本人或者管理员才可以删除
         User loginUser = userService.getLoginUser(request);
-        ThrowUtils.throwIf(!imgToDelete.getUserId().equals(loginUser.getId()) && !userService.isAdmin(loginUser),
-                ErrorCode.NO_AUTH, "Controller: 当前用户无权限删除该图片");
-
-        // 数据库删除该图片
-        boolean isDelete = imageService.removeById(id);
-        ThrowUtils.throwIf(!isDelete, ErrorCode.OPERATION_ERROR, "Controller: 未正确删除该图片");
-        // 清理 COS 中的图片资源
-        imageService.removeImageFileOnCOS(imgToDelete);
+        imageService.deleteImage(id, loginUser);
         return ResUtils.success(true);
     }
 
@@ -179,6 +172,14 @@ public class ImageController {
         Image image = imageService.getById(imgId);
         ThrowUtils.throwIf(image == null,
                 ErrorCode.NOT_FOUND, "Controller: 该图片不存在");
+
+        // 需要对空间权限进行校验，如果 areaId 不为空图片说明在私人空间
+        Long areaId = image.getAreaId();
+        if (areaId != null) {
+            User loginUser = userService.getLoginUser(request);
+            imageService.checkImageOpsAuth(loginUser, image);
+        }
+
         return ResUtils.success(imageService.getImageVO(image, request));
     }
 
@@ -209,8 +210,22 @@ public class ImageController {
         // 对用户分页请求的 pageSize 进行限制，防止其进行爬虫
         ThrowUtils.throwIf(pageSize > 20, ErrorCode.PARAMS_ERROR, "Controller: 非法参数");
 
-        // 对查询结果进行过滤，只允许普通用户查询到审核通过的图片
-        imageQueryRequest.setReviewStatus(ImageReviewStatusEnum.PASS.getVal());
+        // 根据 areaId 区分公共空间和私有空间
+        Long areaId = imageQueryRequest.getAreaId();
+        if (areaId != null) {
+            User loginUser = userService.getLoginUser(request);
+            Area area = areaService.getById(areaId);
+            // 校验用户空间权限
+            ThrowUtils.throwIf(area == null,
+                    ErrorCode.NOT_FOUND, "Controller: 该空间不存在");
+            ThrowUtils.throwIf(!area.getUserId().equals(loginUser.getId()),
+                    ErrorCode.NO_AUTH, "Controller: 无权限访问该空间");
+        } else {
+            // 公共图库，用户可以看到经过审核的数据
+            // 对查询结果进行过滤，只允许普通用户查询到审核通过的图片
+            imageQueryRequest.setReviewStatus(ImageReviewStatusEnum.PASS.getVal());
+            imageQueryRequest.setNullAreaId(true);
+        }
 
         // 分页查询数据库
         Page<Image> imagePage = imageService.page(new Page<Image>(current, pageSize),
@@ -223,6 +238,7 @@ public class ImageController {
     /**
      * 通过缓存分页获取图片列表（封装类）
      */
+    @Deprecated
     @PostMapping("/list/page/vo/cache")
     public BaseResponse<Page<ImageVO>> listImageVOByPageWithCache(@RequestBody ImageQueryRequest imageQueryRequest,
                                                                   HttpServletRequest request) {
@@ -250,7 +266,7 @@ public class ImageController {
         valInCache = valOps.get(key);
         // 如果缓存命中，更新本地缓存后，反序列化后直接返回结果
         if (valInCache != null) {
-            LOCAL_CACHE.put(key,valInCache);
+            LOCAL_CACHE.put(key, valInCache);
             Page<ImageVO> pageInCache = JSONUtil.toBean(valInCache, Page.class);
             return ResUtils.success(pageInCache);
         }
@@ -267,7 +283,7 @@ public class ImageController {
         valOps.set(key, valToCache, timeout, TimeUnit.SECONDS);
 
         // 3.2 写入本地缓存
-        LOCAL_CACHE.put(key,valToCache);
+        LOCAL_CACHE.put(key, valToCache);
         // 转为 VO Page 返回
         return ResUtils.success(imageVOPage);
     }
@@ -281,28 +297,9 @@ public class ImageController {
         // 请求判空
         ThrowUtils.throwIf(imageEditRequest == null || imageEditRequest.getId() <= 0,
                 ErrorCode.PARAMS_ERROR, "Controller: 编辑图片请求为空");
-        // 将 请求 dto 转换为 Image 实体类，tags 需要手动转为 Json String，并设置编辑时间
-        Image image = new Image();
-        BeanUtil.copyProperties(imageEditRequest, image);
-        image.setTags(JSONUtil.toJsonStr(imageEditRequest.getTags()));
-        image.setEditTime(new Date());
-        // 图片数据校验，判断更新的图片是否存在
-        imageService.verifyImage(image);
-        Long id = imageEditRequest.getId();
-        Image imgToEdit = imageService.getById(id);
-        ThrowUtils.throwIf(imgToEdit == null,
-                ErrorCode.NOT_FOUND, "Controller: 编辑图片不存在");
 
-        // 获取登录用户，校验只有本人或管理员才可以对图片进行编辑
         User loginUser = userService.getLoginUser(request);
-        ThrowUtils.throwIf(!imgToEdit.getUserId().equals(loginUser.getId()) && !userService.isAdmin(loginUser),
-                ErrorCode.NO_AUTH, "Controller: 当前用户无权限编辑该图片");
-        // 添加审核参数
-        imageService.addReviewParams(image, loginUser);
-
-        // 数据库更新图片
-        boolean isEdit = imageService.updateById(image);
-        ThrowUtils.throwIf(!isEdit, ErrorCode.OPERATION_ERROR, "Controller: 未正确编辑该图片");
+        imageService.editImage(imageEditRequest, loginUser);
         return ResUtils.success(true);
     }
 

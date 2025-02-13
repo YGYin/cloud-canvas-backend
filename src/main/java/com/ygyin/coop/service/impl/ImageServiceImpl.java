@@ -1,9 +1,11 @@
 package com.ygyin.coop.service.impl;
 
+import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -15,14 +17,13 @@ import com.ygyin.coop.manager.upload.FileImageUpload;
 import com.ygyin.coop.manager.upload.ImageUploadTemplate;
 import com.ygyin.coop.manager.upload.UrlImageUpload;
 import com.ygyin.coop.model.dto.file.UploadImageResult;
-import com.ygyin.coop.model.dto.image.ImageFetchRequest;
-import com.ygyin.coop.model.dto.image.ImageQueryRequest;
-import com.ygyin.coop.model.dto.image.ImageReviewRequest;
-import com.ygyin.coop.model.dto.image.ImageUploadRequest;
+import com.ygyin.coop.model.dto.image.*;
+import com.ygyin.coop.model.entity.Area;
 import com.ygyin.coop.model.entity.Image;
 import com.ygyin.coop.model.entity.User;
 import com.ygyin.coop.model.enums.ImageReviewStatusEnum;
 import com.ygyin.coop.model.vo.ImageVO;
+import com.ygyin.coop.service.AreaService;
 import com.ygyin.coop.service.ImageService;
 import com.ygyin.coop.mapper.ImageMapper;
 import com.ygyin.coop.service.UserService;
@@ -34,6 +35,7 @@ import org.jsoup.select.Elements;
 import org.springframework.beans.BeanUtils;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
@@ -64,6 +66,12 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
     private UserService userService;
 
     @Resource
+    private AreaService areaService;
+
+    @Resource
+    private TransactionTemplate transactionTemplate;
+
+    @Resource
     private CosManager cosManager;
 
     /**
@@ -76,8 +84,23 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
      */
     @Override
     public ImageVO uploadImage(Object inputSource, ImageUploadRequest imageUploadRequest, User loginUser) {
-        // 1. 校验用户是否为空
+        // 1. 校验用户是否为空，同时需要校验空间是否存在，是否为当前空间管理员
         ThrowUtils.throwIf(loginUser == null, ErrorCode.NO_AUTH);
+        Long areaId = imageUploadRequest.getAreaId();
+        if (areaId != null) {
+            Area area = areaService.getById(areaId);
+            ThrowUtils.throwIf(area == null,
+                    ErrorCode.NOT_FOUND, "Service: 该空间不存在");
+            // 检查权限
+            ThrowUtils.throwIf(!loginUser.getId().equals(area.getUserId()),
+                    ErrorCode.NO_AUTH, "Service: 没有权限上传文件到该空间");
+            // 校验空间文件数量和空间限制
+            ThrowUtils.throwIf(area.getTotalNum() >= area.getMaxNum(),
+                    ErrorCode.OPERATION_ERROR, "Service: 空间已达最大文件数量");
+            ThrowUtils.throwIf(area.getTotalSize() >= area.getMaxSize(),
+                    ErrorCode.OPERATION_ERROR, "Service: 空间最大容量已满");
+        }
+
         // 2. 判断是新增还是更新，如果是更新需要根据 imageId 判断图片是否为空
         Long imgId = null;
         if (imageUploadRequest != null)
@@ -92,11 +115,27 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
             ThrowUtils.throwIf(!oldImage.getUserId().equals(loginUser.getId())
                             && !userService.isAdmin(loginUser),
                     ErrorCode.NO_AUTH, "Service: 仅本人或管理员可编辑原图片");
+
+            // 校验 area id 如果不为空时是否一致
+            if (areaId != null)
+                ThrowUtils.throwIf(!oldImage.getAreaId().equals(areaId),
+                        ErrorCode.PARAMS_ERROR, "Service: 原图片空间 id 与上传空间 id 不一致");
+            else {
+                // area id 为空，直接复用原来 id，如果原 area id 为空说明上传到公共图库
+                if (oldImage.getAreaId() != null)
+                    areaId = oldImage.getAreaId();
+            }
         }
 
-        // 3. 上传图片，先根据用户 id 或名称构造上传后的路径，通过返回的上传结果得到图片信息
+        // 3. 上传图片，先判断空间 id 是否为空
+        //    为空则先根据用户 id 或名称构造上传后的路径，
+        //    不为空则按照空间 id 来划分目录，通过返回的上传结果得到图片信息
         // todo: 可改为名字
-        String pathPrefix = String.format("public/%s", loginUser.getId());
+        String pathPrefix;
+        if (areaId == null)
+            pathPrefix = String.format("public/%s", loginUser.getId());
+        else
+            pathPrefix = String.format("area/%s", areaId);
 
         // 根据上传文件的类型，来区分上传文件的方式
         // 默认为文件类型，但如果上传的为 String 类型，说明为 url
@@ -108,6 +147,8 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
 
         // 4. 根据图片信息构造 ImageVO
         Image image = new Image();
+        // 加入 area id
+        image.setAreaId(areaId);
         image.setUrl(uploadImgResult.getUrl());
         image.setThumbUrl(uploadImgResult.getThumbUrl());
         String imgName = uploadImgResult.getName();
@@ -132,10 +173,26 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
         }
 
         // 5. 保存或更新数据库，返回 ImageVO
-        boolean isSaveOrUpdate = this.saveOrUpdate(image);
-        // todo 如果是更新图片可删除 COS 中原图片
-        // imageService.removeImageFileOnCOS(imgToUpdate);
-        ThrowUtils.throwIf(!isSaveOrUpdate, ErrorCode.OPERATION_ERROR, "当前图片上传失败");
+        Long finalAreaId = areaId;
+        transactionTemplate.execute(status -> {
+            // 5.1 更新 image 数据库
+            boolean isSaveOrUpdate = this.saveOrUpdate(image);
+            // todo 如果是更新图片可删除 COS 中原图片
+            // imageService.removeImageFileOnCOS(imgToUpdate);
+            ThrowUtils.throwIf(!isSaveOrUpdate, ErrorCode.OPERATION_ERROR, "当前图片上传失败");
+
+            // 5.2 不是公共空间时，才需要更新 area 的使用额度
+            if (finalAreaId != null) {
+                boolean isUpdate = areaService.lambdaUpdate()
+                        .eq(Area::getId, finalAreaId)
+                        .setSql("totalSize = totalSize + " + image.getImgSize())
+                        .setSql("totalNum = totalNum + 1")
+                        .update();
+                ThrowUtils.throwIf(!isUpdate, ErrorCode.OPERATION_ERROR, "当前空间额度更新失败");
+            }
+            return image;
+        });
+
         return ImageVO.objToVo(image);
     }
 
@@ -164,6 +221,9 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
         Integer reviewStatus = imageQueryRequest.getReviewStatus();
         String reviewMsg = imageQueryRequest.getReviewMsg();
         Long reviewerId = imageQueryRequest.getReviewerId();
+        // 获取空间 id
+        Long areaId = imageQueryRequest.getAreaId();
+        boolean nullAreaId = imageQueryRequest.isNullAreaId();
 
         // 3. 新建 QueryWrapper，根据 searchText 搜索图片名称和简介
         QueryWrapper<Image> queryWrapper = new QueryWrapper<>();
@@ -190,6 +250,10 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
         queryWrapper.eq(ObjectUtil.isNotEmpty(reviewStatus), "reviewStatus", reviewStatus);
         queryWrapper.like(StrUtil.isNotBlank(reviewMsg), "reviewMsg", reviewMsg);
         queryWrapper.eq(ObjectUtil.isNotEmpty(reviewerId), "reviewerId", reviewerId);
+
+        queryWrapper.eq(ObjectUtil.isNotEmpty(areaId), "areaId", areaId);
+        queryWrapper.isNull(nullAreaId, "areaId");
+
         // tags 使用 Json 数组查询
         if (CollUtil.isNotEmpty(tags))
             for (String tag : tags)
@@ -366,6 +430,66 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
         return successNum;
     }
 
+    @Override
+    public void editImage(ImageEditRequest imageEditRequest, User loginUser) {
+        // 将 请求 dto 转换为 Image 实体类，tags 需要手动转为 Json String，并设置编辑时间
+        Image image = new Image();
+        BeanUtil.copyProperties(imageEditRequest, image);
+        image.setTags(JSONUtil.toJsonStr(imageEditRequest.getTags()));
+        image.setEditTime(new Date());
+        // 图片数据校验
+        this.verifyImage(image);
+
+        // 判断更新的图片数据库中是否存在
+        Long id = imageEditRequest.getId();
+        Image imgToEdit = this.getById(id);
+        ThrowUtils.throwIf(imgToEdit == null,
+                ErrorCode.NOT_FOUND, "Service: 编辑图片不存在");
+
+        // 校验用户权限，校验只有本人或管理员才可以对图片进行编辑
+        this.checkImageOpsAuth(loginUser, imgToEdit);
+        // 添加审核参数
+        this.addReviewParams(image, loginUser);
+
+        // 数据库更新图片
+        boolean isEdit = this.updateById(image);
+        ThrowUtils.throwIf(!isEdit,
+                ErrorCode.OPERATION_ERROR, "Service: 未正确编辑该图片");
+    }
+
+    @Override
+    public void deleteImage(long imgId, User loginUser) {
+        ThrowUtils.throwIf(imgId <= 0 || loginUser == null,
+                ErrorCode.PARAMS_ERROR, "Service: 删除图片参数不合法");
+        // 判断删除的图片是否存在
+        Image imgToDelete = this.getById(imgId);
+        ThrowUtils.throwIf(imgToDelete == null,
+                ErrorCode.NOT_FOUND, "Service: 删除的图片不存在");
+
+        // 校验权限，只有上传该图片的本人或者管理员才可以删除
+        this.checkImageOpsAuth(loginUser, imgToDelete);
+
+        // 数据库删除该图片, todo 管理页面删除公共图片有可能额度异常
+        transactionTemplate.execute(status -> {
+            // 5.1 更新 image 数据库
+            boolean isDelete = this.removeById(imgId);
+            ThrowUtils.throwIf(!isDelete,
+                    ErrorCode.OPERATION_ERROR, "Service: 未正确删除该图片");
+
+            // 5.2 更新 area 的使用额度
+            boolean isUpdate = areaService.lambdaUpdate()
+                    .eq(Area::getId, imgToDelete.getAreaId())
+                    .setSql("totalSize = totalSize + " + imgToDelete.getImgSize())
+                    .setSql("totalNum = totalNum - 1")
+                    .update();
+            ThrowUtils.throwIf(!isUpdate, ErrorCode.OPERATION_ERROR, "当前空间额度更新失败");
+            return true;
+        });
+
+        // 清理 COS 中的图片资源
+        this.removeImageFileOnCOS(imgToDelete);
+    }
+
     @Async
     @Override
     public void removeImageFileOnCOS(Image oldImage) {
@@ -385,6 +509,20 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
         if (!thumbUrl.isEmpty())
             cosManager.deleteObject(thumbUrl);
 
+    }
+
+    @Override
+    public void checkImageOpsAuth(User loginUser, Image image) {
+        Long imgAreaId = image.getAreaId();
+        Long loginUserId = loginUser.getId();
+
+        // 如果为公共图库，只有本人或者管理员可以操作该图片
+        if (imgAreaId == null)
+            ThrowUtils.throwIf(!image.getUserId().equals(loginUserId) && !userService.isAdmin(loginUser),
+                    ErrorCode.NO_AUTH, "Service: 无权限操作该图片");
+        else
+            ThrowUtils.throwIf(!image.getUserId().equals(loginUserId),
+                    ErrorCode.NO_AUTH, "Service: 无权限操作该图片");
     }
 
 }

@@ -2,10 +2,7 @@ package com.ygyin.coop.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.ygyin.coop.model.dto.image.ImageFetchRequest;
-import com.ygyin.coop.model.dto.image.ImageQueryRequest;
-import com.ygyin.coop.model.dto.image.ImageReviewRequest;
-import com.ygyin.coop.model.dto.image.ImageUploadRequest;
+import com.ygyin.coop.model.dto.image.*;
 import com.ygyin.coop.model.entity.Image;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.ygyin.coop.model.entity.User;
@@ -39,7 +36,7 @@ public interface ImageService extends IService<Image> {
      * @param imageQueryRequest 图片查询请求
      * @return
      */
-    public QueryWrapper<Image> getQueryWrapper(ImageQueryRequest imageQueryRequest);
+    QueryWrapper<Image> getQueryWrapper(ImageQueryRequest imageQueryRequest);
 
 
     /**
@@ -49,7 +46,7 @@ public interface ImageService extends IService<Image> {
      * @param request
      * @return
      */
-    public ImageVO getImageVO(Image image, HttpServletRequest request);
+    ImageVO getImageVO(Image image, HttpServletRequest request);
 
     /**
      * 分页获取封装后的图片 VO 对象
@@ -58,14 +55,14 @@ public interface ImageService extends IService<Image> {
      * @param request
      * @return
      */
-    public Page<ImageVO> getImageVOPage(Page<Image> imagePage, HttpServletRequest request);
+    Page<ImageVO> getImageVOPage(Page<Image> imagePage, HttpServletRequest request);
 
     /**
      * 校验图片的 id, url 和 简介等参数是否合法
      *
      * @param image
      */
-    public void verifyImage(Image image);
+    void verifyImage(Image image);
 
     /**
      * 图片审核
@@ -93,8 +90,33 @@ public interface ImageService extends IService<Image> {
     Integer uploadImageByFetch(ImageFetchRequest imageFetchRequest, User loginUser);
 
     /**
+     * 编辑图片
+     *
+     * @param imageEditRequest
+     * @param loginUser
+     */
+    void editImage(ImageEditRequest imageEditRequest, User loginUser);
+
+    /**
+     * 删除图片
+     *
+     * @param imgId
+     * @param loginUser
+     */
+    void deleteImage(long imgId, User loginUser);
+
+    /**
      * 删除对象存储中的图片文件
+     *
      * @param oldImage
      */
     void removeImageFileOnCOS(Image oldImage);
+
+    /**
+     * 校验用户是否有权限操作该图片
+     *
+     * @param loginUser
+     * @param image
+     */
+    void checkImageOpsAuth(User loginUser, Image image);
 }
