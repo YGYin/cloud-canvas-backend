@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ygyin.coop.mapper.AreaMapper">
+
+    <resultMap id="BaseResultMap" type="com.ygyin.coop.model.entity.Area">
+            <id property="id" column="id" jdbcType="BIGINT"/>
+            <result property="areaName" column="areaName" jdbcType="VARCHAR"/>
+            <result property="areaLevel" column="areaLevel" jdbcType="INTEGER"/>
+            <result property="maxSize" column="maxSize" jdbcType="BIGINT"/>
+            <result property="maxNum" column="maxNum" jdbcType="BIGINT"/>
+            <result property="totalSize" column="totalSize" jdbcType="BIGINT"/>
+            <result property="totalNum" column="totalNum" jdbcType="BIGINT"/>
+            <result property="userId" column="userId" jdbcType="BIGINT"/>
+            <result property="createTime" column="createTime" jdbcType="TIMESTAMP"/>
+            <result property="editTime" column="editTime" jdbcType="TIMESTAMP"/>
+            <result property="updateTime" column="updateTime" jdbcType="TIMESTAMP"/>
+            <result property="isDelete" column="isDelete" jdbcType="TINYINT"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,areaName,areaLevel,
+        maxSize,maxNum,totalSize,
+        totalNum,userId,createTime,
+        editTime,updateTime,isDelete
+    </sql>
+</mapper>
