@@ -33,7 +33,6 @@ import org.springframework.web.multipart.MultipartFile;
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import java.util.Arrays;
-import java.util.Date;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -340,4 +339,37 @@ public class ImageController {
         return ResUtils.success(successFetchNum);
     }
 
+    @PostMapping("/search/color")
+    public BaseResponse<List<ImageVO>> searchImageByColor(
+            @RequestBody SearchImageByColorRequest searchImageByColorRequest,
+            HttpServletRequest request) {
+        // 请求判空
+        ThrowUtils.throwIf(searchImageByColorRequest == null,
+                ErrorCode.PARAMS_ERROR, "Controller: 通过颜色相似度搜索图片请求为空");
+        // 获取参数
+        String picColor = searchImageByColorRequest.getImgColor();
+        Long areaId = searchImageByColorRequest.getAreaId();
+
+        User loginUser = userService.getLoginUser(request);
+        List<ImageVO> imgComparedList = imageService.searchImageByColorSimilar(areaId, picColor, loginUser);
+        return ResUtils.success(imgComparedList);
+    }
+
+    /**
+     * 批量更新图片分类和标签
+     *
+     * @param imageBatchEditRequest
+     * @param request
+     * @return
+     */
+    @PostMapping("/edit/batch")
+    public BaseResponse<Boolean> batchEditImage(
+            @RequestBody ImageBatchEditRequest imageBatchEditRequest,
+            HttpServletRequest request) {
+        ThrowUtils.throwIf(imageBatchEditRequest == null,
+                ErrorCode.PARAMS_ERROR, "Controller: 批量修改图片请求为空");
+        User loginUser = userService.getLoginUser(request);
+        imageService.batchEditImage(imageBatchEditRequest, loginUser);
+        return ResUtils.success(true);
+    }
 }

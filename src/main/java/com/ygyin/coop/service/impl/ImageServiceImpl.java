@@ -27,6 +27,7 @@ import com.ygyin.coop.service.AreaService;
 import com.ygyin.coop.service.ImageService;
 import com.ygyin.coop.mapper.ImageMapper;
 import com.ygyin.coop.service.UserService;
+import com.ygyin.coop.util.ColorUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -39,11 +40,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
+import java.awt.*;
 import java.io.IOException;
-import java.util.Date;
+import java.util.*;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -162,6 +162,9 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
         image.setImgHeight(uploadImgResult.getImgHeight());
         image.setImgScale(uploadImgResult.getImgScale());
         image.setImgFormat(uploadImgResult.getImgFormat());
+        // todo 可选颜色矫正
+        String correctColor = ColorUtil.colorCorrection(uploadImgResult.getImgColor());
+        image.setImgColor(correctColor);
         image.setUserId(loginUser.getId());
         // 添加审核参数
         this.addReviewParams(image, loginUser);
@@ -224,6 +227,9 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
         // 获取空间 id
         Long areaId = imageQueryRequest.getAreaId();
         boolean nullAreaId = imageQueryRequest.isNullAreaId();
+        // 获取搜索时间段
+        Date beginEditTime = imageQueryRequest.getBeginEditTime();
+        Date endEditTime = imageQueryRequest.getEndEditTime();
 
         // 3. 新建 QueryWrapper，根据 searchText 搜索图片名称和简介
         QueryWrapper<Image> queryWrapper = new QueryWrapper<>();
@@ -253,6 +259,9 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
 
         queryWrapper.eq(ObjectUtil.isNotEmpty(areaId), "areaId", areaId);
         queryWrapper.isNull(nullAreaId, "areaId");
+
+        queryWrapper.ge(ObjectUtil.isNotEmpty(beginEditTime), "editTime", beginEditTime);
+        queryWrapper.lt(ObjectUtil.isNotEmpty(endEditTime), "editTime", endEditTime);
 
         // tags 使用 Json 数组查询
         if (CollUtil.isNotEmpty(tags))
@@ -524,6 +533,121 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
             ThrowUtils.throwIf(!image.getUserId().equals(loginUserId),
                     ErrorCode.NO_AUTH, "Service: 无权限操作该图片");
     }
+
+    @Override
+    public List<ImageVO> searchImageByColorSimilar(Long areaId, String imgColor, User loginUser) {
+        // 1. 校验参数是否合法
+        ThrowUtils.throwIf(areaId == null || imgColor.isEmpty(),
+                ErrorCode.PARAMS_ERROR, "Service: 颜色相似度参数不合法");
+        ThrowUtils.throwIf(loginUser == null,
+                ErrorCode.NOT_FOUND, "Service: 当前用户不存在");
+        // 2. 校验用户是否有权限访问权限
+        Area area = areaService.getById(areaId);
+        ThrowUtils.throwIf(area == null,
+                ErrorCode.NOT_FOUND, "Service: 当前空间不存在");
+        ThrowUtils.throwIf(!loginUser.getId().equals(area.getUserId()),
+                ErrorCode.NO_AUTH, "Service: 当前用户无权限访问该空间");
+
+        // 3. 查询当前空间下所有图片，图片必须带有 imgColor 属性
+        List<Image> imgList = this.lambdaQuery()
+                .eq(Image::getAreaId, areaId)
+                .isNotNull(Image::getImgColor)
+                .list();
+        // 没有对应的图片则返回空
+        if (imgList.isEmpty())
+            return Collections.emptyList();
+
+        //  有图片的话先将目标颜色转换为 RGB
+        Color targetColor = Color.decode(imgColor);
+
+        // 5. 利用工具类遍历 list 计算每张图片和目标图片的颜色相似度，并按相似度进行排序
+        List<Image> comparedImgList = imgList.stream()
+                .sorted(Comparator.comparingDouble(image -> {
+                    String hexColor = image.getImgColor();
+                    // 颜色字符串为空
+                    if (hexColor.isEmpty())
+                        return Double.MAX_VALUE;
+                    // 有颜色则转换为 RGB
+                    Color colorToCompare = Color.decode(hexColor);
+                    // 工具类返回的为越大越相似，当 comparator 按从小到大排序
+                    return -ColorUtil.calculateSimilarity(targetColor, colorToCompare);
+                }))
+                .limit(10)
+                .collect(Collectors.toList());
+        // 返回时转换为视图类 list
+        return comparedImgList.stream()
+                .map(ImageVO::objToVo)
+                .collect(Collectors.toList());
+
+    }
+
+    @Override
+    public void batchEditImage(ImageBatchEditRequest imageBatchEditRequest, User loginUser) {
+        // 1. 获取并校验参数
+        List<Long> imgIdList = imageBatchEditRequest.getImgIdList();
+        Long areaId = imageBatchEditRequest.getAreaId();
+        String category = imageBatchEditRequest.getCategory();
+        List<String> tags = imageBatchEditRequest.getTags();
+        ThrowUtils.throwIf(imgIdList.isEmpty() || areaId == null,
+                ErrorCode.PARAMS_ERROR, "Service: 批量更新请求参数为空");
+        ThrowUtils.throwIf(loginUser == null,
+                ErrorCode.NO_AUTH, "Service: 用户不合法");
+
+        // 2. 校验用户的空间权限
+        Area area = areaService.getById(areaId);
+        ThrowUtils.throwIf(area == null,
+                ErrorCode.NOT_FOUND, "Service: 该空间不存在");
+        ThrowUtils.throwIf(!loginUser.getId().equals(area.getUserId()),
+                ErrorCode.NO_AUTH, "Service: 无权限访问当前空间");
+
+        // 3. 通过 areaId 和 图片 id 字段查询指定的图片
+        List<Image> imgToEditList = this.lambdaQuery()
+                .select(Image::getId, Image::getAreaId)
+                .eq(Image::getAreaId, areaId)
+                .in(Image::getId, imgIdList)
+                .list();
+        if (imgToEditList == null)
+            return;
+
+        // 4. 批量更新其分类和标签
+        imgToEditList.forEach(image -> {
+            // 如果批量更改请求中的 分类 和 标签 不为空，则填入对象
+            if (!category.isEmpty())
+                image.setCategory(category);
+            if (!tags.isEmpty())
+                image.setTags(JSONUtil.toJsonStr(tags));
+        });
+
+        // 5. 根据规则批量重命名
+        String nameNorm = imageBatchEditRequest.getNameNorm();
+        batchRenameImgWithNorm(imgToEditList, nameNorm);
+        // 6. 更新数据库
+        boolean isUpdate = this.updateBatchById(imgToEditList);
+        ThrowUtils.throwIf(!isUpdate, ErrorCode.OPERATION_ERROR, "Service: 批量更新失败");
+    }
+
+    /**
+     * 根据命名规则对图片进行批量重命名
+     *
+     * @param imgList
+     * @param nameNorm
+     */
+    private void batchRenameImgWithNorm(List<Image> imgList, String nameNorm) {
+        if (CollUtil.isEmpty(imgList) || StrUtil.isBlank(nameNorm)) {
+            return;
+        }
+        long count = 1;
+        try {
+            for (Image image : imgList) {
+                String imgName = nameNorm.replaceAll("\\{序号}", String.valueOf(count++));
+                image.setName(imgName);
+            }
+        } catch (Exception e) {
+            log.error("名称解析错误", e);
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "Service: 名称解析错误");
+        }
+    }
+
 
 }
 

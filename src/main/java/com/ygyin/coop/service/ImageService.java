@@ -9,6 +9,7 @@ import com.ygyin.coop.model.entity.User;
 import com.ygyin.coop.model.vo.ImageVO;
 
 import javax.servlet.http.HttpServletRequest;
+import java.util.List;
 
 /**
  * @author yg
@@ -119,4 +120,21 @@ public interface ImageService extends IService<Image> {
      * @param image
      */
     void checkImageOpsAuth(User loginUser, Image image);
+
+    /**
+     * 根据 RGB 颜色来搜索颜色相近的图片
+     * @param areaId
+     * @param imgColor
+     * @param loginUser
+     * @return
+     */
+    List<ImageVO> searchImageByColorSimilar(Long areaId, String imgColor, User loginUser);
+
+    /**
+     * 批量编辑
+     *
+     * @param imageBatchEditRequest
+     * @param loginUser
+     */
+    void batchEditImage(ImageBatchEditRequest imageBatchEditRequest, User loginUser);
 }
