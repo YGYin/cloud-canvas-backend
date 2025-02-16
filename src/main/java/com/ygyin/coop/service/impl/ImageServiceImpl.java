@@ -9,6 +9,9 @@ import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.ygyin.coop.api.aliyun.model.NewOutPaintingTaskRequest;
+import com.ygyin.coop.api.aliyun.model.NewOutPaintingTaskResponse;
+import com.ygyin.coop.api.aliyun.outpainting.OutPaintingApi;
 import com.ygyin.coop.exception.BusinessException;
 import com.ygyin.coop.exception.ErrorCode;
 import com.ygyin.coop.exception.ThrowUtils;
@@ -73,6 +76,9 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
 
     @Resource
     private CosManager cosManager;
+
+    @Resource
+    private OutPaintingApi outPaintingApi;
 
     /**
      * 上传图片
@@ -626,6 +632,28 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
         ThrowUtils.throwIf(!isUpdate, ErrorCode.OPERATION_ERROR, "Service: 批量更新失败");
     }
 
+    @Override
+    public NewOutPaintingTaskResponse newImageOutPaintingTask(NewImageOutPaintingTaskRequest imgOutPaintingTaskRequest,
+                                                              User loginUser) {
+        // 1. 获取图片信息，判空
+        Long imgId = imgOutPaintingTaskRequest.getImgId();
+        Image image = this.getById(imgId);
+        ThrowUtils.throwIf(image==null,
+                ErrorCode.NOT_FOUND, "Service: 当前图片不存在");
+        // 2. 校验用户操作图片的权限
+        checkImageOpsAuth(loginUser,image);
+
+        // 3. 构造请求参数
+        NewOutPaintingTaskRequest taskRequest = new NewOutPaintingTaskRequest();
+        NewOutPaintingTaskRequest.Input input = new NewOutPaintingTaskRequest.Input();
+        input.setImageUrl(image.getUrl());
+        taskRequest.setInput(input);
+        BeanUtil.copyProperties(imgOutPaintingTaskRequest, taskRequest);
+
+        // 4. 返回请求调用结果
+        return outPaintingApi.createOutPaintingTask(taskRequest);
+    }
+
     /**
      * 根据命名规则对图片进行批量重命名
      *
@@ -647,8 +675,6 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "Service: 名称解析错误");
         }
     }
-
-
 }
 
 

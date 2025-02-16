@@ -2,6 +2,7 @@ package com.ygyin.coop.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.ygyin.coop.api.aliyun.model.NewOutPaintingTaskResponse;
 import com.ygyin.coop.model.dto.image.*;
 import com.ygyin.coop.model.entity.Image;
 import com.baomidou.mybatisplus.extension.service.IService;
@@ -137,4 +138,13 @@ public interface ImageService extends IService<Image> {
      * @param loginUser
      */
     void batchEditImage(ImageBatchEditRequest imageBatchEditRequest, User loginUser);
+
+    /**
+     * 新建扩图任务
+     *
+     * @param imgOutPaintingTaskRequest
+     * @param loginUser
+     * @return
+     */
+    NewOutPaintingTaskResponse newImageOutPaintingTask(NewImageOutPaintingTaskRequest imgOutPaintingTaskRequest, User loginUser);
 }
