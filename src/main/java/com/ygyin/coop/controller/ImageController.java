@@ -7,6 +7,9 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.ygyin.coop.annotation.AuthVerify;
+import com.ygyin.coop.api.aliyun.model.GetOutPaintingTaskStatusResponse;
+import com.ygyin.coop.api.aliyun.model.NewOutPaintingTaskResponse;
+import com.ygyin.coop.api.aliyun.outpainting.OutPaintingApi;
 import com.ygyin.coop.common.BaseResponse;
 import com.ygyin.coop.common.DeleteRequest;
 import com.ygyin.coop.common.ResUtils;
@@ -52,6 +55,9 @@ public class ImageController {
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
+
+    @Resource
+    private OutPaintingApi outPaintingApi;
 
     private final Cache<String, String> LOCAL_CACHE =
             Caffeine.newBuilder().initialCapacity(1024)
@@ -371,5 +377,33 @@ public class ImageController {
         User loginUser = userService.getLoginUser(request);
         imageService.batchEditImage(imageBatchEditRequest, loginUser);
         return ResUtils.success(true);
+    }
+
+
+    @PostMapping("/out_painting/new_task")
+    public BaseResponse<NewOutPaintingTaskResponse> newImageOutPaintingTask(
+            @RequestBody NewImageOutPaintingTaskRequest imgOutPaintingTaskRequest,
+            HttpServletRequest request) {
+        ThrowUtils.throwIf(imgOutPaintingTaskRequest == null || imgOutPaintingTaskRequest.getImgId() == null,
+                ErrorCode.PARAMS_ERROR, "Controller: 扩图请求为空");
+
+        User loginUser = userService.getLoginUser(request);
+        NewOutPaintingTaskResponse response = imageService.newImageOutPaintingTask(imgOutPaintingTaskRequest, loginUser);
+        return ResUtils.success(response);
+    }
+
+    /**
+     * 获取扩图任务状态
+     *
+     * @param taskId
+     * @return
+     */
+    @GetMapping("/out_painting/get_task_status")
+    public BaseResponse<GetOutPaintingTaskStatusResponse> getImageOutPaintingTaskStatus(String taskId) {
+        ThrowUtils.throwIf(taskId.isEmpty(),
+                ErrorCode.PARAMS_ERROR, "Controller: 获取扩图任务状态 id 为空");
+
+        GetOutPaintingTaskStatusResponse taskStatusResponse = outPaintingApi.getOutPaintingTaskStatus(taskId);
+        return ResUtils.success(taskStatusResponse);
     }
 }
