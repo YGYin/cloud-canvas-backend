@@ -104,5 +104,16 @@ public class ImageQueryRequest extends PageRequest implements Serializable {
      */
     private Date reviewTime;
 
+    /**
+     * 用于查询的开始编辑时间
+     */
+    private Date beginEditTime;
+
+    /**
+     * 用于查询的结束编辑时间
+     */
+    private Date endEditTime;
+
+
     private static final long serialVersionUID = 1L;
 }
