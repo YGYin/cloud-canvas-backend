@@ -3,7 +3,7 @@ package com.ygyin.coop.model.dto.file;
 import lombok.Data;
 
 /**
- * 上传图片结果，在调用完上传图片后，接收得到该结果
+ * 上传图片结果，在调用完上传图片后，接收得到的图片解析结果
  */
 @Data
 public class UploadImageResult {
@@ -47,5 +47,10 @@ public class UploadImageResult {
      * 图片格式
      */
     private String imgFormat;
+
+    /**
+     * 图片颜色
+     */
+    private String imgColor;
 
 }

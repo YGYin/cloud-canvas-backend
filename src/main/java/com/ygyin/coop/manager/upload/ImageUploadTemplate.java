@@ -76,7 +76,7 @@ public abstract class ImageUploadTemplate {
                 if (processedObjList.size() > 1)
                     thumbObj = processedObjList.get(1);
 
-                return buildUploadResult(originName, compressedCiObj, thumbObj);
+                return buildUploadResult(originName, compressedCiObj, thumbObj, imgInfo);
             }
 
             // 5. 从中取出图片信息，封装返回结果
@@ -101,7 +101,8 @@ public abstract class ImageUploadTemplate {
      */
     private UploadImageResult buildUploadResult(String originName,
                                                 CIObject compressedCiObj,
-                                                CIObject thumbCiObj) {
+                                                CIObject thumbCiObj,
+                                                ImageInfo imgInfo) {
         // 需要将上传结果返回给调用方，封装 UploadImageResult 包装类
         UploadImageResult uploadImgResult = new UploadImageResult();
         int imgWidth = compressedCiObj.getWidth();
@@ -117,6 +118,7 @@ public abstract class ImageUploadTemplate {
         uploadImgResult.setImgHeight(imgHeight);
         uploadImgResult.setImgScale(imgScale);
         uploadImgResult.setImgFormat(compressedCiObj.getFormat());
+        uploadImgResult.setImgColor(imgInfo.getAve());
 
         return uploadImgResult;
     }
@@ -143,6 +145,7 @@ public abstract class ImageUploadTemplate {
         uploadImgResult.setImgHeight(imgHeight);
         uploadImgResult.setImgScale(imgScale);
         uploadImgResult.setImgFormat(imgInfo.getFormat());
+        uploadImgResult.setImgColor(imgInfo.getAve());
 
         return uploadImgResult;
     }
