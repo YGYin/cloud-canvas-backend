@@ -11,6 +11,7 @@ import com.ygyin.coop.exception.ErrorCode;
 import com.ygyin.coop.exception.ThrowUtils;
 import com.ygyin.coop.model.dto.area.*;
 import com.ygyin.coop.model.dto.area.analyze.AreaCategoryAnalyzeRequest;
+import com.ygyin.coop.model.dto.area.analyze.AreaSizeAnalyzeRequest;
 import com.ygyin.coop.model.dto.area.analyze.AreaTagAnalyzeRequest;
 import com.ygyin.coop.model.dto.area.analyze.AreaUsageAnalyzeRequest;
 import com.ygyin.coop.model.entity.Area;
@@ -18,6 +19,7 @@ import com.ygyin.coop.model.entity.User;
 import com.ygyin.coop.model.enums.AreaLevelEnum;
 import com.ygyin.coop.model.vo.AreaVO;
 import com.ygyin.coop.model.vo.area.analyze.AreaCategoryAnalyzeResponse;
+import com.ygyin.coop.model.vo.area.analyze.AreaSizeAnalyzeResponse;
 import com.ygyin.coop.model.vo.area.analyze.AreaTagAnalyzeResponse;
 import com.ygyin.coop.model.vo.area.analyze.AreaUsageAnalyzeResponse;
 import com.ygyin.coop.service.AreaAnalyzeService;
@@ -102,6 +104,25 @@ public class AreaAnalyzeController {
                 ErrorCode.PARAMS_ERROR, "Controller: 分析空间图片 tag 请求为空");
         User loginUser = userService.getLoginUser(request);
         List<AreaTagAnalyzeResponse> responseList = areaAnalyzeService.getAreaTagAnalyze(tagAnalyzeRequest, loginUser);
+        return ResUtils.success(responseList);
+    }
+
+    /**
+     * 获取特定空间的图片文件大小分析
+     *
+     * @param sizeAnalyzeRequest
+     * @param request
+     * @return
+     */
+    @PostMapping("/size")
+    public BaseResponse<List<AreaSizeAnalyzeResponse>> getAreaSizeAnalyze(
+            @RequestBody AreaSizeAnalyzeRequest sizeAnalyzeRequest,
+            HttpServletRequest request) {
+        // 判空，获取用户调用接口获得结果
+        ThrowUtils.throwIf(sizeAnalyzeRequest == null,
+                ErrorCode.PARAMS_ERROR, "Controller: 分析空间图片 size 请求为空");
+        User loginUser = userService.getLoginUser(request);
+        List<AreaSizeAnalyzeResponse> responseList = areaAnalyzeService.getAreaSizeAnalyze(sizeAnalyzeRequest, loginUser);
         return ResUtils.success(responseList);
     }
 

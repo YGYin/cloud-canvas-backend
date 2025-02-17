@@ -9,14 +9,12 @@ import com.ygyin.coop.exception.BusinessException;
 import com.ygyin.coop.exception.ErrorCode;
 import com.ygyin.coop.exception.ThrowUtils;
 import com.ygyin.coop.mapper.AreaMapper;
-import com.ygyin.coop.model.dto.area.analyze.AreaAnalyzeRequest;
-import com.ygyin.coop.model.dto.area.analyze.AreaCategoryAnalyzeRequest;
-import com.ygyin.coop.model.dto.area.analyze.AreaTagAnalyzeRequest;
-import com.ygyin.coop.model.dto.area.analyze.AreaUsageAnalyzeRequest;
+import com.ygyin.coop.model.dto.area.analyze.*;
 import com.ygyin.coop.model.entity.Area;
 import com.ygyin.coop.model.entity.Image;
 import com.ygyin.coop.model.entity.User;
 import com.ygyin.coop.model.vo.area.analyze.AreaCategoryAnalyzeResponse;
+import com.ygyin.coop.model.vo.area.analyze.AreaSizeAnalyzeResponse;
 import com.ygyin.coop.model.vo.area.analyze.AreaTagAnalyzeResponse;
 import com.ygyin.coop.model.vo.area.analyze.AreaUsageAnalyzeResponse;
 import com.ygyin.coop.service.AreaAnalyzeService;
@@ -26,10 +24,7 @@ import com.ygyin.coop.service.UserService;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -224,4 +219,39 @@ public class AreaAnalyzeServiceImpl extends ServiceImpl<AreaMapper, Area>
         return responseList;
     }
 
+    @Override
+    public List<AreaSizeAnalyzeResponse> getAreaSizeAnalyze(AreaSizeAnalyzeRequest sizeAnalyzeRequest, User loginUser) {
+        ThrowUtils.throwIf(sizeAnalyzeRequest == null,
+                ErrorCode.PARAMS_ERROR, "Service: Size 分析请求为空");
+
+        // 1. 根据分析范围检验用户是否有权限
+        this.checkAreaAnalyzeAuth(sizeAnalyzeRequest, loginUser);
+
+        // 2. 构建查询条件
+        QueryWrapper<Image> queryWrapper = new QueryWrapper<>();
+        this.setAnalyzeQueryWrapper(sizeAnalyzeRequest, queryWrapper);
+
+        // 3. 查询 imgSize 列
+        queryWrapper.select("imgSize");
+        List<Long> imgSizeList = imageService.getBaseMapper().selectObjs(queryWrapper)
+                .stream()
+                // 取 imgSize 为非空的
+                .filter(ObjUtil::isNotNull)
+                .map(imgSize -> (Long) imgSize)
+                .collect(Collectors.toList());
+
+        // 4. 对图片大小自定义划定分段范围，使用 linkedHashMap 保证插入有序
+        // key: 分段范围  Val: 大小位于该范围的图片数量
+        Map<String, Long> sizeRangeMap = new LinkedHashMap<>();
+        sizeRangeMap.put("<100KB", imgSizeList.stream().filter(size -> size < 100 * 1024).count());
+        sizeRangeMap.put("100KB-500KB", imgSizeList.stream().filter(size -> size >= 100 * 1024 && size < 500 * 1024).count());
+        sizeRangeMap.put("500KB-1MB", imgSizeList.stream().filter(size -> size >= 500 * 1024 && size < 1 * 1024 * 1024).count());
+        sizeRangeMap.put(">1MB", imgSizeList.stream().filter(size -> size >= 1 * 1024 * 1024).count());
+
+        // 5. 再将 map 转为响应对象
+        List<AreaSizeAnalyzeResponse> responseList = sizeRangeMap.entrySet().stream()
+                .map(entry -> new AreaSizeAnalyzeResponse(entry.getKey(), entry.getValue()))
+                .collect(Collectors.toList());
+        return responseList;
+    }
 }
