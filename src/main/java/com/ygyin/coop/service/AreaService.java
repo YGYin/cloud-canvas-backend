@@ -67,4 +67,12 @@ public interface AreaService extends IService<Area> {
      * @param area
      */
     void setDefaultAreaByLevel(Area area);
+
+    /**
+     * 检查当前用户是否有权访问该空间
+     *
+     * @param loginUser
+     * @param area
+     */
+    void checkUserAreaAuth(User loginUser, Area area);
 }

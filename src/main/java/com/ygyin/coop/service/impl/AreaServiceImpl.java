@@ -195,6 +195,13 @@ public class AreaServiceImpl extends ServiceImpl<AreaMapper, Area>
         }
     }
 
+    @Override
+    public void checkUserAreaAuth(User loginUser, Area area) {
+        // 限制仅有本人或者管理员可编辑空间
+        ThrowUtils.throwIf(!area.getUserId().equals(loginUser.getId())
+                && !userService.isAdmin(loginUser), ErrorCode.NO_AUTH);
+    }
+
 }
 
 
