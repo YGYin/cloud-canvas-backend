@@ -1,6 +1,8 @@
 package com.ygyin.coop.service.impl;
 
 import cn.hutool.core.util.NumberUtil;
+import cn.hutool.core.util.ObjUtil;
+import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ygyin.coop.exception.BusinessException;
@@ -9,11 +11,13 @@ import com.ygyin.coop.exception.ThrowUtils;
 import com.ygyin.coop.mapper.AreaMapper;
 import com.ygyin.coop.model.dto.area.analyze.AreaAnalyzeRequest;
 import com.ygyin.coop.model.dto.area.analyze.AreaCategoryAnalyzeRequest;
+import com.ygyin.coop.model.dto.area.analyze.AreaTagAnalyzeRequest;
 import com.ygyin.coop.model.dto.area.analyze.AreaUsageAnalyzeRequest;
 import com.ygyin.coop.model.entity.Area;
 import com.ygyin.coop.model.entity.Image;
 import com.ygyin.coop.model.entity.User;
 import com.ygyin.coop.model.vo.area.analyze.AreaCategoryAnalyzeResponse;
+import com.ygyin.coop.model.vo.area.analyze.AreaTagAnalyzeResponse;
 import com.ygyin.coop.model.vo.area.analyze.AreaUsageAnalyzeResponse;
 import com.ygyin.coop.service.AreaAnalyzeService;
 import com.ygyin.coop.service.AreaService;
@@ -22,7 +26,10 @@ import com.ygyin.coop.service.UserService;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -177,6 +184,42 @@ public class AreaAnalyzeServiceImpl extends ServiceImpl<AreaMapper, Area>
                     Long totalSize = (Long) res.get("totalSize");
                     return new AreaCategoryAnalyzeResponse(category, totalSize, totalNum);
                 }).collect(Collectors.toList());
+
+        return responseList;
+    }
+
+    @Override
+    public List<AreaTagAnalyzeResponse> getAreaTagAnalyze(AreaTagAnalyzeRequest tagAnalyzeRequest, User loginUser) {
+        ThrowUtils.throwIf(tagAnalyzeRequest == null,
+                ErrorCode.PARAMS_ERROR, "Service: tag 分析请求为空");
+
+        // 1. 根据分析范围检验用户是否有权限
+        this.checkAreaAnalyzeAuth(tagAnalyzeRequest, loginUser);
+
+        // 2. 构建查询条件
+        QueryWrapper<Image> queryWrapper = new QueryWrapper<>();
+        this.setAnalyzeQueryWrapper(tagAnalyzeRequest, queryWrapper);
+
+        // 3. 查 tags 列
+        queryWrapper.select("tags");
+        // 储存为 ["tagA", "tagB"], ["tagA", "tagC"], ...
+        List<String> tagsJsonList = imageService.getBaseMapper().selectObjs(queryWrapper)
+                .stream()
+                // 取 tags 为非空的
+                .filter(ObjUtil::isNotNull)
+                .map(Object::toString)
+                .collect(Collectors.toList());
+
+        Map<String, Long> tagUsedNumMap = tagsJsonList.stream()
+                // ["tagA", "tagB"], ["tagA", "tagC"], ... -> "tagA", "tagB", "tagA", "tagC", ...
+                .flatMap(tagsJson -> JSONUtil.toList(tagsJson, String.class).stream())
+                .collect(Collectors.groupingBy(tag -> tag, Collectors.counting()));
+
+        // 再将 map 转为响应类对象，根据标签的使用统计次数进行排序
+        List<AreaTagAnalyzeResponse> responseList = tagUsedNumMap.entrySet().stream()
+                .sorted((o1, o2) -> Long.compare(o2.getValue(), o1.getValue()))
+                .map(entry -> new AreaTagAnalyzeResponse(entry.getKey(), entry.getValue()))
+                .collect(Collectors.toList());
 
         return responseList;
     }

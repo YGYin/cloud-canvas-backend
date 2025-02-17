@@ -11,12 +11,14 @@ import com.ygyin.coop.exception.ErrorCode;
 import com.ygyin.coop.exception.ThrowUtils;
 import com.ygyin.coop.model.dto.area.*;
 import com.ygyin.coop.model.dto.area.analyze.AreaCategoryAnalyzeRequest;
+import com.ygyin.coop.model.dto.area.analyze.AreaTagAnalyzeRequest;
 import com.ygyin.coop.model.dto.area.analyze.AreaUsageAnalyzeRequest;
 import com.ygyin.coop.model.entity.Area;
 import com.ygyin.coop.model.entity.User;
 import com.ygyin.coop.model.enums.AreaLevelEnum;
 import com.ygyin.coop.model.vo.AreaVO;
 import com.ygyin.coop.model.vo.area.analyze.AreaCategoryAnalyzeResponse;
+import com.ygyin.coop.model.vo.area.analyze.AreaTagAnalyzeResponse;
 import com.ygyin.coop.model.vo.area.analyze.AreaUsageAnalyzeResponse;
 import com.ygyin.coop.service.AreaAnalyzeService;
 import com.ygyin.coop.service.AreaService;
@@ -81,6 +83,25 @@ public class AreaAnalyzeController {
                 ErrorCode.PARAMS_ERROR, "Controller: 分析空间图片分类请求为空");
         User loginUser = userService.getLoginUser(request);
         List<AreaCategoryAnalyzeResponse> responseList = areaAnalyzeService.getAreaCategoryAnalyze(categoryAnalyzeRequest, loginUser);
+        return ResUtils.success(responseList);
+    }
+
+    /**
+     * 获取特定空间的图片 tag 分析
+     *
+     * @param tagAnalyzeRequest
+     * @param request
+     * @return
+     */
+    @PostMapping("/tag")
+    public BaseResponse<List<AreaTagAnalyzeResponse>> getAreaTagAnalyze(
+            @RequestBody AreaTagAnalyzeRequest tagAnalyzeRequest,
+            HttpServletRequest request) {
+        // 判空，获取用户调用接口获得结果
+        ThrowUtils.throwIf(tagAnalyzeRequest == null,
+                ErrorCode.PARAMS_ERROR, "Controller: 分析空间图片 tag 请求为空");
+        User loginUser = userService.getLoginUser(request);
+        List<AreaTagAnalyzeResponse> responseList = areaAnalyzeService.getAreaTagAnalyze(tagAnalyzeRequest, loginUser);
         return ResUtils.success(responseList);
     }
 
