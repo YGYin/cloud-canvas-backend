@@ -139,4 +139,23 @@ public class AreaAnalyzeController {
         return ResUtils.success(responseList);
     }
 
+    /**
+     * 获取空间按使用量排行分析
+     *
+     * @param rankingAnalyzeRequest
+     * @param request
+     * @return
+     */
+    @PostMapping("/ranking")
+    public BaseResponse<List<Area>> getAreaRankingAnalyze(
+            @RequestBody AreaRankingAnalyzeRequest rankingAnalyzeRequest,
+            HttpServletRequest request) {
+        // 判空，获取用户调用接口获得结果
+        ThrowUtils.throwIf(rankingAnalyzeRequest == null,
+                ErrorCode.PARAMS_ERROR, "Controller: 分析空间排行请求为空");
+        User loginUser = userService.getLoginUser(request);
+        List<Area> responseList = areaAnalyzeService.getAreaRankingAnalyze(rankingAnalyzeRequest, loginUser);
+        return ResUtils.success(responseList);
+    }
+
 }

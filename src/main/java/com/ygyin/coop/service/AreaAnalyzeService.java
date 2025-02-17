@@ -77,4 +77,13 @@ public interface AreaAnalyzeService extends IService<Area> {
      * @return
      */
     List<AreaUserAnalyzeResponse> getAreaUserAnalyze(AreaUserAnalyzeRequest userAnalyzeRequest, User loginUser);
+
+    /**
+     * 获取空间按使用量排行分析数据 (管理员)
+     *
+     * @param rankingAnalyzeRequest
+     * @param loginUser
+     * @return
+     */
+    List<Area> getAreaRankingAnalyze(AreaRankingAnalyzeRequest rankingAnalyzeRequest, User loginUser);
 }

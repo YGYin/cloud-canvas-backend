@@ -265,7 +265,7 @@ public class AreaAnalyzeServiceImpl extends ServiceImpl<AreaMapper, Area>
         this.setAnalyzeQueryWrapper(userAnalyzeRequest, queryWrapper);
         // 此处需要查询条件需要补充用户 id
         Long userId = userAnalyzeRequest.getUserId();
-        queryWrapper.eq(userId!=null,"userId", userId);
+        queryWrapper.eq(userId != null, "userId", userId);
 
         // 分析时间范围日、周、月
         String durationStr = userAnalyzeRequest.getDurationStr();
@@ -296,6 +296,25 @@ public class AreaAnalyzeServiceImpl extends ServiceImpl<AreaMapper, Area>
                 })
                 .collect(Collectors.toList());
         return responseList;
+    }
+
+    @Override
+    public List<Area> getAreaRankingAnalyze(AreaRankingAnalyzeRequest rankingAnalyzeRequest, User loginUser) {
+        ThrowUtils.throwIf(rankingAnalyzeRequest == null,
+                ErrorCode.PARAMS_ERROR, "Service: 空间按使用量排行分析请求为空");
+
+        // 1. 权限校验，仅管理员可查看所有空间按使用量排行
+        ThrowUtils.throwIf(!userService.isAdmin(loginUser),
+                ErrorCode.NO_AUTH, "Service: 当前用户无权限请求空间按使用量排行分析");
+
+        // 3. 构造查询条件
+        QueryWrapper<Area> queryWrapper = new QueryWrapper<>();
+        queryWrapper.select("id", "areaName", "userId", "totalSize")
+                .orderByDesc("totalSize")
+                .last("LIMIT " + rankingAnalyzeRequest.getTopN());
+
+        // 因为直接返回的为空间对象列表，直接使用 list
+        return areaService.list(queryWrapper);
     }
 
 }
