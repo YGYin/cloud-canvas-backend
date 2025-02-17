@@ -4,6 +4,9 @@ import lombok.Data;
 
 import java.io.Serializable;
 
+/**
+ * 容量用量分析响应类
+ */
 @Data
 public class AreaUsageAnalyzeResponse implements Serializable {
     /**
