@@ -8,10 +8,12 @@ import com.ygyin.coop.exception.ErrorCode;
 import com.ygyin.coop.exception.ThrowUtils;
 import com.ygyin.coop.mapper.AreaMapper;
 import com.ygyin.coop.model.dto.area.analyze.AreaAnalyzeRequest;
+import com.ygyin.coop.model.dto.area.analyze.AreaCategoryAnalyzeRequest;
 import com.ygyin.coop.model.dto.area.analyze.AreaUsageAnalyzeRequest;
 import com.ygyin.coop.model.entity.Area;
 import com.ygyin.coop.model.entity.Image;
 import com.ygyin.coop.model.entity.User;
+import com.ygyin.coop.model.vo.area.analyze.AreaCategoryAnalyzeResponse;
 import com.ygyin.coop.model.vo.area.analyze.AreaUsageAnalyzeResponse;
 import com.ygyin.coop.service.AreaAnalyzeService;
 import com.ygyin.coop.service.AreaService;
@@ -21,6 +23,7 @@ import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * @author yg
@@ -130,7 +133,7 @@ public class AreaAnalyzeServiceImpl extends ServiceImpl<AreaMapper, Area>
                     ErrorCode.NOT_FOUND, "Service: 该空间不存在");
             // 因为需要 area 对象
             // 不能只利用 checkAreaAnalyzeAuth 自动根据分析范围检验用户是否有权限
-            checkAreaAnalyzeAuth(usageAnalyzeRequest,loginUser);
+            checkAreaAnalyzeAuth(usageAnalyzeRequest, loginUser);
 
             // 封装响应类
             AreaUsageAnalyzeResponse usageAnalyzeResponse = new AreaUsageAnalyzeResponse();
@@ -148,6 +151,34 @@ public class AreaAnalyzeServiceImpl extends ServiceImpl<AreaMapper, Area>
 
             return usageAnalyzeResponse;
         }
+    }
+
+    @Override
+    public List<AreaCategoryAnalyzeResponse> getAreaCategoryAnalyze(AreaCategoryAnalyzeRequest categoryAnalyzeRequest, User loginUser) {
+        ThrowUtils.throwIf(categoryAnalyzeRequest == null,
+                ErrorCode.PARAMS_ERROR, "Service: 分类分析请求为空");
+
+        // 1. 根据分析范围检验用户是否有权限
+        this.checkAreaAnalyzeAuth(categoryAnalyzeRequest, loginUser);
+
+        // 2. 构建查询条件
+        QueryWrapper<Image> queryWrapper = new QueryWrapper<>();
+        this.setAnalyzeQueryWrapper(categoryAnalyzeRequest, queryWrapper);
+
+        queryWrapper.select("category", "count(*) as totalNum", "sum(imgSize) as totalSize")
+                .groupBy("category");
+
+        // 返回多个列，使用 selectMap
+        List<AreaCategoryAnalyzeResponse> responseList = imageService.getBaseMapper().selectMaps(queryWrapper)
+                .stream()
+                .map(res -> {
+                    String category = (String) res.get("category");
+                    Long totalNum = (Long) res.get("totalNum");
+                    Long totalSize = (Long) res.get("totalSize");
+                    return new AreaCategoryAnalyzeResponse(category, totalSize, totalNum);
+                }).collect(Collectors.toList());
+
+        return responseList;
     }
 
 }

@@ -3,11 +3,15 @@ package com.ygyin.coop.service;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.ygyin.coop.model.dto.area.analyze.AreaAnalyzeRequest;
+import com.ygyin.coop.model.dto.area.analyze.AreaCategoryAnalyzeRequest;
 import com.ygyin.coop.model.dto.area.analyze.AreaUsageAnalyzeRequest;
 import com.ygyin.coop.model.entity.Area;
 import com.ygyin.coop.model.entity.Image;
 import com.ygyin.coop.model.entity.User;
+import com.ygyin.coop.model.vo.area.analyze.AreaCategoryAnalyzeResponse;
 import com.ygyin.coop.model.vo.area.analyze.AreaUsageAnalyzeResponse;
+
+import java.util.List;
 
 
 /**
@@ -39,4 +43,13 @@ public interface AreaAnalyzeService extends IService<Area> {
      * @return
      */
     AreaUsageAnalyzeResponse getAreaUsageAnalyze(AreaUsageAnalyzeRequest usageAnalyzeRequest, User loginUser);
+
+    /**
+     * 获取空间的图片分类分析数据
+     *
+     * @param categoryAnalyzeRequest
+     * @param loginUser
+     * @return
+     */
+    List<AreaCategoryAnalyzeResponse> getAreaCategoryAnalyze(AreaCategoryAnalyzeRequest categoryAnalyzeRequest, User loginUser);
 }
