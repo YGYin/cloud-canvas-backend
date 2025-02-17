@@ -6,10 +6,7 @@ import com.ygyin.coop.model.dto.area.analyze.*;
 import com.ygyin.coop.model.entity.Area;
 import com.ygyin.coop.model.entity.Image;
 import com.ygyin.coop.model.entity.User;
-import com.ygyin.coop.model.vo.area.analyze.AreaCategoryAnalyzeResponse;
-import com.ygyin.coop.model.vo.area.analyze.AreaSizeAnalyzeResponse;
-import com.ygyin.coop.model.vo.area.analyze.AreaTagAnalyzeResponse;
-import com.ygyin.coop.model.vo.area.analyze.AreaUsageAnalyzeResponse;
+import com.ygyin.coop.model.vo.area.analyze.*;
 
 import java.util.List;
 
@@ -71,4 +68,13 @@ public interface AreaAnalyzeService extends IService<Area> {
      * @return
      */
     List<AreaSizeAnalyzeResponse> getAreaSizeAnalyze(AreaSizeAnalyzeRequest sizeAnalyzeRequest, User loginUser);
+
+    /**
+     * 获取空间用户上传行为分析数据
+     *
+     * @param userAnalyzeRequest
+     * @param loginUser
+     * @return
+     */
+    List<AreaUserAnalyzeResponse> getAreaUserAnalyze(AreaUserAnalyzeRequest userAnalyzeRequest, User loginUser);
 }

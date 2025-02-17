@@ -13,10 +13,7 @@ import com.ygyin.coop.model.dto.area.analyze.*;
 import com.ygyin.coop.model.entity.Area;
 import com.ygyin.coop.model.entity.Image;
 import com.ygyin.coop.model.entity.User;
-import com.ygyin.coop.model.vo.area.analyze.AreaCategoryAnalyzeResponse;
-import com.ygyin.coop.model.vo.area.analyze.AreaSizeAnalyzeResponse;
-import com.ygyin.coop.model.vo.area.analyze.AreaTagAnalyzeResponse;
-import com.ygyin.coop.model.vo.area.analyze.AreaUsageAnalyzeResponse;
+import com.ygyin.coop.model.vo.area.analyze.*;
 import com.ygyin.coop.service.AreaAnalyzeService;
 import com.ygyin.coop.service.AreaService;
 import com.ygyin.coop.service.ImageService;
@@ -254,4 +251,51 @@ public class AreaAnalyzeServiceImpl extends ServiceImpl<AreaMapper, Area>
                 .collect(Collectors.toList());
         return responseList;
     }
+
+    @Override
+    public List<AreaUserAnalyzeResponse> getAreaUserAnalyze(AreaUserAnalyzeRequest userAnalyzeRequest, User loginUser) {
+        ThrowUtils.throwIf(userAnalyzeRequest == null,
+                ErrorCode.PARAMS_ERROR, "Service: 用户上传行为分析请求为空");
+
+        // 1. 根据分析范围检验用户是否有权限
+        this.checkAreaAnalyzeAuth(userAnalyzeRequest, loginUser);
+
+        // 2. 构建查询条件
+        QueryWrapper<Image> queryWrapper = new QueryWrapper<>();
+        this.setAnalyzeQueryWrapper(userAnalyzeRequest, queryWrapper);
+        // 此处需要查询条件需要补充用户 id
+        Long userId = userAnalyzeRequest.getUserId();
+        queryWrapper.eq(userId!=null,"userId", userId);
+
+        // 分析时间范围日、周、月
+        String durationStr = userAnalyzeRequest.getDurationStr();
+        switch (durationStr) {
+            case "day":
+                queryWrapper.select("DATE_FORMAT(createTime, '%Y-%m-%d') AS timeDuration", "COUNT(*) AS uploadNum");
+                break;
+            case "week":
+                queryWrapper.select("YEARWEEK(createTime) AS timeDuration", "COUNT(*) AS uploadNum");
+                break;
+            case "month":
+                queryWrapper.select("DATE_FORMAT(createTime, '%Y-%m') AS timeDuration", "COUNT(*) AS uploadNum");
+                break;
+            default:
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, "Service: 时间范围不合法");
+        }
+        // 按照时间范围分组排序
+        queryWrapper.groupBy("timeDuration").orderByAsc("timeDuration");
+
+        // 3. 查询多列
+        List<Map<String, Object>> durationUploadList = imageService.getBaseMapper().selectMaps(queryWrapper);
+        // 转换为响应对象
+        List<AreaUserAnalyzeResponse> responseList = durationUploadList.stream()
+                .map(res -> {
+                    String timeDuration = res.get("timeDuration").toString();
+                    Long uploadNum = ((Number) res.get("uploadNum")).longValue();
+                    return new AreaUserAnalyzeResponse(timeDuration, uploadNum);
+                })
+                .collect(Collectors.toList());
+        return responseList;
+    }
+
 }

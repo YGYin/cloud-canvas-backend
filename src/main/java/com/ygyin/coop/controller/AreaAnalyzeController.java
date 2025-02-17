@@ -10,18 +10,12 @@ import com.ygyin.coop.constant.UserConstant;
 import com.ygyin.coop.exception.ErrorCode;
 import com.ygyin.coop.exception.ThrowUtils;
 import com.ygyin.coop.model.dto.area.*;
-import com.ygyin.coop.model.dto.area.analyze.AreaCategoryAnalyzeRequest;
-import com.ygyin.coop.model.dto.area.analyze.AreaSizeAnalyzeRequest;
-import com.ygyin.coop.model.dto.area.analyze.AreaTagAnalyzeRequest;
-import com.ygyin.coop.model.dto.area.analyze.AreaUsageAnalyzeRequest;
+import com.ygyin.coop.model.dto.area.analyze.*;
 import com.ygyin.coop.model.entity.Area;
 import com.ygyin.coop.model.entity.User;
 import com.ygyin.coop.model.enums.AreaLevelEnum;
 import com.ygyin.coop.model.vo.AreaVO;
-import com.ygyin.coop.model.vo.area.analyze.AreaCategoryAnalyzeResponse;
-import com.ygyin.coop.model.vo.area.analyze.AreaSizeAnalyzeResponse;
-import com.ygyin.coop.model.vo.area.analyze.AreaTagAnalyzeResponse;
-import com.ygyin.coop.model.vo.area.analyze.AreaUsageAnalyzeResponse;
+import com.ygyin.coop.model.vo.area.analyze.*;
 import com.ygyin.coop.service.AreaAnalyzeService;
 import com.ygyin.coop.service.AreaService;
 import com.ygyin.coop.service.UserService;
@@ -123,6 +117,25 @@ public class AreaAnalyzeController {
                 ErrorCode.PARAMS_ERROR, "Controller: 分析空间图片 size 请求为空");
         User loginUser = userService.getLoginUser(request);
         List<AreaSizeAnalyzeResponse> responseList = areaAnalyzeService.getAreaSizeAnalyze(sizeAnalyzeRequest, loginUser);
+        return ResUtils.success(responseList);
+    }
+
+    /**
+     * 获取用户的上传行为分析
+     *
+     * @param userAnalyzeRequest
+     * @param request
+     * @return
+     */
+    @PostMapping("/user")
+    public BaseResponse<List<AreaUserAnalyzeResponse>> getAreaUserAnalyze(
+            @RequestBody AreaUserAnalyzeRequest userAnalyzeRequest,
+            HttpServletRequest request) {
+        // 判空，获取用户调用接口获得结果
+        ThrowUtils.throwIf(userAnalyzeRequest == null,
+                ErrorCode.PARAMS_ERROR, "Controller: 分析空间用户上传行为请求为空");
+        User loginUser = userService.getLoginUser(request);
+        List<AreaUserAnalyzeResponse> responseList = areaAnalyzeService.getAreaUserAnalyze(userAnalyzeRequest, loginUser);
         return ResUtils.success(responseList);
     }
 
