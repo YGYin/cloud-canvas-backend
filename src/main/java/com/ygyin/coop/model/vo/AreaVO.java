@@ -5,7 +5,9 @@ import com.ygyin.coop.model.entity.Area;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 
 /**
  * 空间 VO 类
@@ -57,6 +59,12 @@ public class AreaVO implements Serializable {
      * 创建用户 id
      */
     private Long userId;
+
+    /**
+     * 权限列表
+     */
+    private List<String> permissionList = new ArrayList<>();
+
 
     /**
      * 创建时间

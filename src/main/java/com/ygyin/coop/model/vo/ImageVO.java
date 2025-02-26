@@ -2,11 +2,11 @@ package com.ygyin.coop.model.vo;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.json.JSONUtil;
-import com.baomidou.mybatisplus.annotation.*;
 import com.ygyin.coop.model.entity.Image;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
@@ -89,6 +89,11 @@ public class ImageVO implements Serializable {
      * 个人空间 id
      */
     private Long areaId;
+
+    /**
+     * 权限列表
+     */
+    private List<String> permissionList = new ArrayList<>();
 
     /**
      * 创建时间
