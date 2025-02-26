@@ -172,8 +172,8 @@ public class AreaAnalyzeServiceImpl extends ServiceImpl<AreaMapper, Area>
                 .stream()
                 .map(res -> {
                     String category = (String) res.get("category");
-                    Long totalNum = (Long) res.get("totalNum");
-                    Long totalSize = (Long) res.get("totalSize");
+                    Long totalNum = ((Number) res.get("totalNum")).longValue();
+                    Long totalSize = ((Number) res.get("totalSize")).longValue();
                     return new AreaCategoryAnalyzeResponse(category, totalSize, totalNum);
                 }).collect(Collectors.toList());
 
@@ -316,5 +316,4 @@ public class AreaAnalyzeServiceImpl extends ServiceImpl<AreaMapper, Area>
         // 因为直接返回的为空间对象列表，直接使用 list
         return areaService.list(queryWrapper);
     }
-
 }
