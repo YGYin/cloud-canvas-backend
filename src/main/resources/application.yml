@@ -13,8 +13,8 @@ spring:
     username: root
     password: YGYin0307
   # 配置选择
-#  profiles:
-#    active: local
+  profiles:
+    active: local
 
 # MyBatis
 mybatis-plus:
