@@ -9,6 +9,7 @@ import com.ygyin.coop.constant.UserConstant;
 import com.ygyin.coop.exception.BusinessException;
 import com.ygyin.coop.exception.ErrorCode;
 import com.ygyin.coop.exception.ThrowUtils;
+import com.ygyin.coop.manager.auth.StpKit;
 import com.ygyin.coop.mapper.UserMapper;
 import com.ygyin.coop.model.dto.user.UserLoginRequest;
 import com.ygyin.coop.model.dto.user.UserQueryRequest;
@@ -132,6 +133,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
         // 3. 保存用户的登录状态，并返回脱敏后的用户信息
         request.getSession().setAttribute(UserConstant.USER_LOGIN_STATE, selectedUser);
+        // 同时保存用户登录态到 Sa-token
+        StpKit.AREA.login(selectedUser.getId());
+        StpKit.AREA.getSession().set(UserConstant.USER_LOGIN_STATE, selectedUser);
+
         return getLoginUserVO(selectedUser);
     }
 
