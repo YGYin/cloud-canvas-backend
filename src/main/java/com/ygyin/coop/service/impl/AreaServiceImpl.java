@@ -11,11 +11,15 @@ import com.ygyin.coop.exception.ThrowUtils;
 import com.ygyin.coop.model.dto.area.AreaAddRequest;
 import com.ygyin.coop.model.dto.area.AreaQueryRequest;
 import com.ygyin.coop.model.entity.Area;
+import com.ygyin.coop.model.entity.AreaUser;
 import com.ygyin.coop.model.entity.User;
 import com.ygyin.coop.model.enums.AreaLevelEnum;
+import com.ygyin.coop.model.enums.AreaRoleEnum;
+import com.ygyin.coop.model.enums.AreaTypeEnum;
 import com.ygyin.coop.model.vo.AreaVO;
 import com.ygyin.coop.service.AreaService;
 import com.ygyin.coop.mapper.AreaMapper;
+import com.ygyin.coop.service.AreaUserService;
 import com.ygyin.coop.service.UserService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -41,6 +45,9 @@ public class AreaServiceImpl extends ServiceImpl<AreaMapper, Area>
     private UserService userService;
 
     @Resource
+    private AreaUserService areaUserService;
+
+    @Resource
     private TransactionTemplate transactionTemplate;
 
 
@@ -51,20 +58,26 @@ public class AreaServiceImpl extends ServiceImpl<AreaMapper, Area>
         String areaName = area.getAreaName();
         Integer areaLevel = area.getAreaLevel();
         AreaLevelEnum levelEnum = AreaLevelEnum.getEnumByVal(areaLevel);
-
-        // 2. 如果为创建新空间请求，需要校验空间名称和等级是否为空
-        if (isAdd)
+        Integer areaType = area.getAreaType();
+        AreaTypeEnum areaTypeEnum = AreaTypeEnum.getEnumByVal(areaType);
+        // 2. 如果为创建新空间请求，需要校验空间名称，等级和类型是否为空
+        if (isAdd) {
             ThrowUtils.throwIf(areaLevel == null,
                     ErrorCode.PARAMS_ERROR, "Service: 空间等级不能为空");
 
-        ThrowUtils.throwIf(areaName.isEmpty(),
-                ErrorCode.PARAMS_ERROR, "Service: 空间名称不能为空");
+            ThrowUtils.throwIf(areaName.isEmpty(),
+                    ErrorCode.PARAMS_ERROR, "Service: 空间名称不能为空");
 
+            ThrowUtils.throwIf(areaType == null,
+                    ErrorCode.PARAMS_ERROR, "Service: 空间类型不能为空");
+        }
         // 3. 为更新空间请求，需要检查名称是否合法，等级是否合法
         ThrowUtils.throwIf(areaName.length() > 25,
                 ErrorCode.PARAMS_ERROR, "Service: 空间名称过长，请限制长度在 25 个字符内");
         ThrowUtils.throwIf(areaLevel != null && levelEnum == null,
                 ErrorCode.PARAMS_ERROR, "Service: 空间等级不合法");
+        ThrowUtils.throwIf(areaType != null && areaTypeEnum == null,
+                ErrorCode.PARAMS_ERROR, "Service: 空间类别不合法");
     }
 
     @Override
@@ -72,10 +85,13 @@ public class AreaServiceImpl extends ServiceImpl<AreaMapper, Area>
         // 1. 将 request 转为 area 实体类，填充参数默认值
         Area area = new Area();
         BeanUtil.copyProperties(areaAddRequest, area);
+        // 请求中的参数如果为空，则补充默认值
         if (areaAddRequest.getAreaName().isEmpty())
             area.setAreaName("Default Area");
         if (areaAddRequest.getAreaLevel() == null)
             area.setAreaLevel(AreaLevelEnum.DEFAULT.getVal());
+        if (areaAddRequest.getAreaType() == null)
+            area.setAreaType(AreaTypeEnum.PRIVATE.getVal());
         this.setDefaultAreaByLevel(area);
 
         // 2. 对 area 中的数据进行过校验，并设置 userId
@@ -89,17 +105,37 @@ public class AreaServiceImpl extends ServiceImpl<AreaMapper, Area>
                 ErrorCode.NO_AUTH, "Service: 没有足够权限创建空间");
 
         // 4. 针对 userId 来进行加锁操作数据库，不同的用户可以拿到不同的锁
+        // 4. 令同一个用户只能创建一个私有空间和一个团队空间
+        //     针对 userId 来进行加锁操作数据库，不同的用户可以拿到不同的锁
         //     避免对整个方法进行加锁
         String lock = String.valueOf(userId).intern();
         synchronized (lock) {
             Long addAreaId = transactionTemplate.execute(status -> {
-                // 查询 Area 表中是否存在该用户创建的空间
-                boolean userExists = this.lambdaQuery().eq(Area::getUserId, userId).exists();
+                // 查询 Area 表中是否存在该用户创建的私有空间或团队空间
+                boolean userExists = this.lambdaQuery()
+                        .eq(Area::getUserId, userId)
+                        .eq(Area::getAreaType, area.getAreaType())
+                        .exists();
                 ThrowUtils.throwIf(userExists,
-                        ErrorCode.OPERATION_ERROR, "Service: 当前用户已创建空间，每个用户只能创建一个私有空间");
+                        ErrorCode.OPERATION_ERROR, "Service: 当前用户已创建空间，每个用户只能创建一个私有或团队空间");
                 // 操作数据库进行写入
                 boolean isSave = this.save(area);
                 ThrowUtils.throwIf(!isSave, ErrorCode.OPERATION_ERROR, "Service: 未成功创建空间");
+
+                // 创建空间成功，如果该空间为团队空间，将当前空间用户记录添加到空间成员表
+                if (area.getAreaType() == AreaTypeEnum.TEAM.getVal()) {
+                    AreaUser areaUser = new AreaUser();
+                    areaUser.setAreaId(area.getId());
+                    areaUser.setUserId(userId);
+                    areaUser.setAreaRole(AreaRoleEnum.ADMIN.getVal());
+                    // 保存记录到数据库
+                    boolean isAreaUserSave = areaUserService.save(areaUser);
+                    ThrowUtils.throwIf(!isAreaUserSave,
+                            ErrorCode.OPERATION_ERROR, "Service: 未成功添加空间成员");
+                }
+                // 如果是 Ultra 团队空间，动态创建分表
+//                dynamicShardingManager.createImageSubTableByArea(area);
+
                 return area.getId();
             });
             // 返回包装类
@@ -163,6 +199,7 @@ public class AreaServiceImpl extends ServiceImpl<AreaMapper, Area>
         Long userId = areaQueryRequest.getUserId();
         String areaName = areaQueryRequest.getAreaName();
         Integer areaLevel = areaQueryRequest.getAreaLevel();
+        Integer areaType = areaQueryRequest.getAreaType();
         String sortField = areaQueryRequest.getSortField();
         String sortOrder = areaQueryRequest.getSortOrder();
 
@@ -174,6 +211,7 @@ public class AreaServiceImpl extends ServiceImpl<AreaMapper, Area>
 
         queryWrapper.like(StrUtil.isNotBlank(areaName), "areaName", areaName);
         queryWrapper.eq(ObjectUtil.isNotEmpty(areaLevel), "areaLevel", areaLevel);
+        queryWrapper.eq(ObjectUtil.isNotEmpty(areaType), "areaType", areaType);
 
         // 对结果进行排序
         queryWrapper.orderBy(StrUtil.isNotEmpty(sortField), sortOrder.equals("ascend"), sortField);
