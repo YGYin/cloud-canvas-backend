@@ -33,6 +33,10 @@ public class AreaQueryRequest extends PageRequest implements Serializable {
      */
     private Integer areaLevel;
 
+    /**
+     * 空间类型：0-private 1-team
+     */
+    private Integer areaType;
 
     private static final long serialVersionUID = 1L;
 }

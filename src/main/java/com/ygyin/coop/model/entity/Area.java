@@ -30,6 +30,11 @@ public class Area implements Serializable {
     private Integer areaLevel;
 
     /**
+     * 空间类型：0-private 1-team
+     */
+    private Integer areaType;
+
+    /**
      * 空间容量最大限制
      */
     private Long maxSize;

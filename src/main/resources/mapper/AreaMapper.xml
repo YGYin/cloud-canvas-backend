@@ -8,6 +8,7 @@
             <id property="id" column="id" jdbcType="BIGINT"/>
             <result property="areaName" column="areaName" jdbcType="VARCHAR"/>
             <result property="areaLevel" column="areaLevel" jdbcType="INTEGER"/>
+            <result property="areaType" column="areaType" jdbcType="INTEGER"/>
             <result property="maxSize" column="maxSize" jdbcType="BIGINT"/>
             <result property="maxNum" column="maxNum" jdbcType="BIGINT"/>
             <result property="totalSize" column="totalSize" jdbcType="BIGINT"/>
@@ -20,7 +21,7 @@
     </resultMap>
 
     <sql id="Base_Column_List">
-        id,areaName,areaLevel,
+        id,areaName,areaLevel,areaType,
         maxSize,maxNum,totalSize,
         totalNum,userId,createTime,
         editTime,updateTime,isDelete
