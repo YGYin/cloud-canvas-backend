@@ -97,9 +97,9 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
             Area area = areaService.getById(areaId);
             ThrowUtils.throwIf(area == null,
                     ErrorCode.NOT_FOUND, "Service: 该空间不存在");
-            // 检查权限
-            ThrowUtils.throwIf(!loginUser.getId().equals(area.getUserId()),
-                    ErrorCode.NO_AUTH, "Service: 没有权限上传文件到该空间");
+            // 不止有私有空间，还有团队空间，使用 Sa-Token 统一权限校验
+//            ThrowUtils.throwIf(!loginUser.getId().equals(area.getUserId()),
+//                    ErrorCode.NO_AUTH, "Service: 没有权限上传文件到该空间");
             // 校验空间文件数量和空间限制
             ThrowUtils.throwIf(area.getTotalNum() >= area.getMaxNum(),
                     ErrorCode.OPERATION_ERROR, "Service: 空间已达最大文件数量");
@@ -117,10 +117,11 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
             Image oldImage = this.getById(imgId);
             ThrowUtils.throwIf(oldImage == null,
                     ErrorCode.NOT_FOUND, "Service: 原图片不存在");
-            // 仅本人或管理员可编辑
-            ThrowUtils.throwIf(!oldImage.getUserId().equals(loginUser.getId())
-                            && !userService.isAdmin(loginUser),
-                    ErrorCode.NO_AUTH, "Service: 仅本人或管理员可编辑原图片");
+            // 不止有私有空间，还有团队空间，使用 Sa-Token 统一权限校验
+//            // 仅本人或管理员可编辑
+//            ThrowUtils.throwIf(!oldImage.getUserId().equals(loginUser.getId())
+//                            && !userService.isAdmin(loginUser),
+//                    ErrorCode.NO_AUTH, "Service: 仅本人或管理员可编辑原图片");
 
             // 校验 area id 如果不为空时是否一致
             if (areaId != null)
@@ -462,7 +463,8 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
                 ErrorCode.NOT_FOUND, "Service: 编辑图片不存在");
 
         // 校验用户权限，校验只有本人或管理员才可以对图片进行编辑
-        this.checkImageOpsAuth(loginUser, imgToEdit);
+        // 已改为使用 SaToken 自定义注解鉴权
+//        this.checkImageOpsAuth(loginUser, imgToEdit);
         // 添加审核参数
         this.addReviewParams(image, loginUser);
 
@@ -482,7 +484,8 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
                 ErrorCode.NOT_FOUND, "Service: 删除的图片不存在");
 
         // 校验权限，只有上传该图片的本人或者管理员才可以删除
-        this.checkImageOpsAuth(loginUser, imgToDelete);
+        // 已改为使用 SaToken 自定义注解鉴权
+//        this.checkImageOpsAuth(loginUser, imgToDelete);
 
         // 数据库删除该图片, todo 管理页面删除公共图片有可能额度异常
         transactionTemplate.execute(status -> {
@@ -641,7 +644,8 @@ public class ImageServiceImpl extends ServiceImpl<ImageMapper, Image>
         ThrowUtils.throwIf(image==null,
                 ErrorCode.NOT_FOUND, "Service: 当前图片不存在");
         // 2. 校验用户操作图片的权限
-        checkImageOpsAuth(loginUser,image);
+        // 已改为使用 SaToken 自定义注解鉴权
+//        checkImageOpsAuth(loginUser,image);
 
         // 3. 构造请求参数
         NewOutPaintingTaskRequest taskRequest = new NewOutPaintingTaskRequest();

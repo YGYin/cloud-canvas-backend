@@ -16,6 +16,10 @@ import com.ygyin.coop.common.ResUtils;
 import com.ygyin.coop.constant.UserConstant;
 import com.ygyin.coop.exception.ErrorCode;
 import com.ygyin.coop.exception.ThrowUtils;
+import com.ygyin.coop.manager.auth.AreaUserAuthManager;
+import com.ygyin.coop.manager.auth.StpKit;
+import com.ygyin.coop.manager.auth.annotation.SaAreaCheckPermission;
+import com.ygyin.coop.manager.auth.model.AreaUserPermissionConstant;
 import com.ygyin.coop.model.dto.image.*;
 import com.ygyin.coop.model.entity.Area;
 import com.ygyin.coop.model.entity.Image;
@@ -54,6 +58,9 @@ public class ImageController {
     private AreaService areaService;
 
     @Resource
+    private AreaUserAuthManager areaUserAuthManager;
+
+    @Resource
     private StringRedisTemplate stringRedisTemplate;
 
     @Resource
@@ -71,6 +78,7 @@ public class ImageController {
      * 上传图片
      */
     @PostMapping("/upload")
+    @SaAreaCheckPermission(value = AreaUserPermissionConstant.IMAGE_UPLOAD)
 //    @AuthVerify(requiredRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<ImageVO> uploadImage(
             @RequestPart("file") MultipartFile multipartFile,
@@ -88,6 +96,7 @@ public class ImageController {
      * 通过 URL 上传图片（可重新上传）
      */
     @PostMapping("/upload/url")
+    @SaAreaCheckPermission(value = AreaUserPermissionConstant.IMAGE_UPLOAD)
     public BaseResponse<ImageVO> uploadImageByUrl(
             @RequestBody ImageUploadRequest imageUploadRequest,
             HttpServletRequest request) {
@@ -104,6 +113,7 @@ public class ImageController {
      * 删除图片
      */
     @PostMapping("/delete")
+    @SaAreaCheckPermission(value = AreaUserPermissionConstant.IMAGE_DELETE)
     public BaseResponse<Boolean> deleteImage(
             @RequestBody DeleteRequest deleteRequest,
             HttpServletRequest request) {
@@ -180,12 +190,23 @@ public class ImageController {
 
         // 需要对空间权限进行校验，如果 areaId 不为空图片说明在私人空间
         Long areaId = image.getAreaId();
+        Area area = null;
         if (areaId != null) {
-            User loginUser = userService.getLoginUser(request);
-            imageService.checkImageOpsAuth(loginUser, image);
+            // 已改为使用 SaToken 自定义注解鉴权
+            boolean hasPermission = StpKit.AREA.hasPermission(AreaUserPermissionConstant.IMAGE_VIEW);
+            ThrowUtils.throwIf(!hasPermission,
+                    ErrorCode.NO_AUTH, "Controller: 无权访问该空间的图片");
+            // 获取 area 和 loginUser 来获取权限列表
+            area = areaService.getById(areaId);
+            ThrowUtils.throwIf(area == null,
+                    ErrorCode.NOT_FOUND, "Controller: 该空间不存在");
         }
+        User loginUser = userService.getLoginUser(request);
+        List<String> permissionList = areaUserAuthManager.getPermissionList(area, loginUser);
+        ImageVO imageVO = imageService.getImageVO(image, request);
+        imageVO.setPermissionList(permissionList);
 
-        return ResUtils.success(imageService.getImageVO(image, request));
+        return ResUtils.success(imageVO);
     }
 
     /**
@@ -218,13 +239,17 @@ public class ImageController {
         // 根据 areaId 区分公共空间和私有空间
         Long areaId = imageQueryRequest.getAreaId();
         if (areaId != null) {
-            User loginUser = userService.getLoginUser(request);
-            Area area = areaService.getById(areaId);
-            // 校验用户空间权限
-            ThrowUtils.throwIf(area == null,
-                    ErrorCode.NOT_FOUND, "Controller: 该空间不存在");
-            ThrowUtils.throwIf(!area.getUserId().equals(loginUser.getId()),
-                    ErrorCode.NO_AUTH, "Controller: 无权限访问该空间");
+            // 已改为使用 SaToken 自定义注解鉴权
+            boolean hasPermission = StpKit.AREA.hasPermission(AreaUserPermissionConstant.IMAGE_VIEW);
+            ThrowUtils.throwIf(!hasPermission,
+                    ErrorCode.NO_AUTH, "Controller: 无权访问该空间的图片");
+//            User loginUser = userService.getLoginUser(request);
+//            Area area = areaService.getById(areaId);
+//            // 校验用户空间权限
+//            ThrowUtils.throwIf(area == null,
+//                    ErrorCode.NOT_FOUND, "Controller: 该空间不存在");
+//            ThrowUtils.throwIf(!area.getUserId().equals(loginUser.getId()),
+//                    ErrorCode.NO_AUTH, "Controller: 无权限访问该空间");
         } else {
             // 公共图库，用户可以看到经过审核的数据
             // 对查询结果进行过滤，只允许普通用户查询到审核通过的图片
@@ -298,6 +323,7 @@ public class ImageController {
      * 编辑图片（用户）
      */
     @PostMapping("/edit")
+    @SaAreaCheckPermission(value = AreaUserPermissionConstant.IMAGE_EDIT)
     public BaseResponse<Boolean> editImage(@RequestBody ImageEditRequest imageEditRequest, HttpServletRequest request) {
         // 请求判空
         ThrowUtils.throwIf(imageEditRequest == null || imageEditRequest.getId() <= 0,
@@ -346,6 +372,7 @@ public class ImageController {
     }
 
     @PostMapping("/search/color")
+    @SaAreaCheckPermission(value = AreaUserPermissionConstant.IMAGE_VIEW)
     public BaseResponse<List<ImageVO>> searchImageByColor(
             @RequestBody SearchImageByColorRequest searchImageByColorRequest,
             HttpServletRequest request) {
@@ -369,6 +396,7 @@ public class ImageController {
      * @return
      */
     @PostMapping("/edit/batch")
+    @SaAreaCheckPermission(value = AreaUserPermissionConstant.IMAGE_EDIT)
     public BaseResponse<Boolean> batchEditImage(
             @RequestBody ImageBatchEditRequest imageBatchEditRequest,
             HttpServletRequest request) {
@@ -381,6 +409,7 @@ public class ImageController {
 
 
     @PostMapping("/out_painting/new_task")
+    @SaAreaCheckPermission(value = AreaUserPermissionConstant.IMAGE_EDIT)
     public BaseResponse<NewOutPaintingTaskResponse> newImageOutPaintingTask(
             @RequestBody NewImageOutPaintingTaskRequest imgOutPaintingTaskRequest,
             HttpServletRequest request) {
