@@ -8,6 +8,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ygyin.coop.exception.ErrorCode;
 import com.ygyin.coop.exception.ThrowUtils;
+import com.ygyin.coop.manager.sharding.DynamicShardingManager;
 import com.ygyin.coop.model.dto.area.AreaAddRequest;
 import com.ygyin.coop.model.dto.area.AreaQueryRequest;
 import com.ygyin.coop.model.entity.Area;
@@ -21,6 +22,7 @@ import com.ygyin.coop.service.AreaService;
 import com.ygyin.coop.mapper.AreaMapper;
 import com.ygyin.coop.service.AreaUserService;
 import com.ygyin.coop.service.UserService;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -49,6 +51,10 @@ public class AreaServiceImpl extends ServiceImpl<AreaMapper, Area>
 
     @Resource
     private TransactionTemplate transactionTemplate;
+
+//    @Resource
+//    @Lazy
+//    private DynamicShardingManager dynamicShardingManager;
 
 
     @Override
@@ -104,7 +110,6 @@ public class AreaServiceImpl extends ServiceImpl<AreaMapper, Area>
                         && !userService.isAdmin(loginUser),
                 ErrorCode.NO_AUTH, "Service: 没有足够权限创建空间");
 
-        // 4. 针对 userId 来进行加锁操作数据库，不同的用户可以拿到不同的锁
         // 4. 令同一个用户只能创建一个私有空间和一个团队空间
         //     针对 userId 来进行加锁操作数据库，不同的用户可以拿到不同的锁
         //     避免对整个方法进行加锁
