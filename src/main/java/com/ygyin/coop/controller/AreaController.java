@@ -9,6 +9,7 @@ import com.ygyin.coop.common.ResUtils;
 import com.ygyin.coop.constant.UserConstant;
 import com.ygyin.coop.exception.ErrorCode;
 import com.ygyin.coop.exception.ThrowUtils;
+import com.ygyin.coop.manager.auth.AreaUserAuthManager;
 import com.ygyin.coop.model.dto.area.*;
 import com.ygyin.coop.model.entity.Area;
 import com.ygyin.coop.model.entity.User;
@@ -36,6 +37,9 @@ public class AreaController {
 
     @Resource
     private AreaService areaService;
+
+    @Resource
+    private AreaUserAuthManager areaUserAuthManager;
 
     @PostMapping("/add")
     public BaseResponse<Long> addArea(@RequestBody AreaAddRequest areaAddRequest,
@@ -135,7 +139,13 @@ public class AreaController {
         Area area = areaService.getById(id);
         ThrowUtils.throwIf(area == null,
                 ErrorCode.NOT_FOUND, "Controller: 该空间不存在");
-        return ResUtils.success(areaService.getAreaVO(area, request));
+        User loginUser = userService.getLoginUser(request);
+        List<String> permissionList = areaUserAuthManager.getPermissionList(area, loginUser);
+        // 转换为 areaVO，同时补充返回给前端的权限列表
+        AreaVO areaVO = areaService.getAreaVO(area, request);
+        areaVO.setPermissionList(permissionList);
+
+        return ResUtils.success(areaVO);
     }
 
     /**
@@ -206,7 +216,7 @@ public class AreaController {
     }
 
     /**
-     * 编辑空间（用户）
+     * 获取权限列表
      */
     @GetMapping("/list/level")
     public BaseResponse<List<AreaLevel>> listAreaLevel() {
