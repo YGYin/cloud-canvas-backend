@@ -1,0 +1,62 @@
+{
+  "permissions": [
+    {
+      "key": "areaUser:manage",
+      "name": "成员管理",
+      "desc": "管理空间成员，添加或移除成员"
+    },
+    {
+      "key": "image:view",
+      "name": "查看图片",
+      "desc": "查看空间中的图片内容"
+    },
+    {
+      "key": "image:upload",
+      "name": "上传图片",
+      "desc": "上传图片到空间中"
+    },
+    {
+      "key": "image:edit",
+      "name": "修改图片",
+      "desc": "编辑已上传的图片信息"
+    },
+    {
+      "key": "image:delete",
+      "name": "删除图片",
+      "desc": "删除空间中的图片"
+    }
+  ],
+  "roles": [
+    {
+      "key": "viewer",
+      "name": "浏览者",
+      "permissions": [
+        "image:view"
+      ],
+      "desc": "查看图片"
+    },
+    {
+      "key": "editor",
+      "name": "编辑者",
+      "permissions": [
+        "image:view",
+        "image:upload",
+        "image:edit",
+        "image:delete"
+      ],
+      "desc": "查看、上传、修改和删除图片"
+    },
+    {
+      "key": "admin",
+      "name": "管理员",
+      "permissions": [
+        "areaUser:manage",
+        "image:view",
+        "image:upload",
+        "image:edit",
+        "image:delete"
+      ],
+      "desc": "成员管理，查看、上传、修改和删除图片"
+    }
+  ]
+}
