@@ -5,6 +5,7 @@ import cn.hutool.json.JSONUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
+import com.ygyin.coop.manager.websocket.disruptor.ImageEditEventProducer;
 import com.ygyin.coop.manager.websocket.model.ImageEditActionEnum;
 import com.ygyin.coop.manager.websocket.model.ImageEditMessageTypeEnum;
 import com.ygyin.coop.manager.websocket.model.ImageEditRequestMessage;
@@ -12,6 +13,7 @@ import com.ygyin.coop.manager.websocket.model.ImageEditResponseMessage;
 import com.ygyin.coop.model.entity.User;
 import com.ygyin.coop.service.UserService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -29,6 +31,10 @@ public class ImageEditHandler extends TextWebSocketHandler {
 
     @Resource
     private UserService userService;
+
+    @Resource
+    @Lazy
+    private ImageEditEventProducer imgEditEventProducer;
 
     /**
      * 每张图片的编辑状态，key: imgId, value: 当前正在编辑该图片的用户 id
@@ -49,6 +55,7 @@ public class ImageEditHandler extends TextWebSocketHandler {
      */
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+        super.afterConnectionEstablished(session);
         // 从 session 中取得 imgId，保存 session 到建立连接的所有会话 map 中
         Long imgId = (Long) session.getAttributes().get("imgId");
         imgSessions.putIfAbsent(imgId, ConcurrentHashMap.newKeySet());
@@ -60,6 +67,7 @@ public class ImageEditHandler extends TextWebSocketHandler {
         User user = (User) session.getAttributes().get("user");
         String message = String.format("%s加入编辑", user.getUserName());
         imgEditResponseMessage.setMessage(message);
+        // todo: 应该将当前正在编辑该图片的用户进行广播，而不是广播当前 session 的用户
         imgEditResponseMessage.setUser(userService.getUserVO(user));
         // 广播给同一张图片的用户
         broadcastToUserInImg(imgId, imgEditResponseMessage);
@@ -78,33 +86,14 @@ public class ImageEditHandler extends TextWebSocketHandler {
         super.handleTextMessage(session, message);
         // 将前端发来的操作消息解析为 ImageEditMessage，并获取消息类型及枚举类，用于做下一步处理
         ImageEditRequestMessage imgEditRequestMessage = JSONUtil.toBean(message.getPayload(), ImageEditRequestMessage.class);
-        String msgType = imgEditRequestMessage.getMsgType();
-        ImageEditMessageTypeEnum imgEditMessageTypeEnum = ImageEditMessageTypeEnum.valueOf(msgType);
 
         // 从 Session 属性中获取公共参数
         Map<String, Object> attributes = session.getAttributes();
         User user = (User) attributes.get("user");
         Long imgId = (Long) attributes.get("imgId");
 
-        // 调用对应的消息处理方法
-        switch (imgEditMessageTypeEnum) {
-            case START_EDIT:
-                handleStartEditMessage(imgEditRequestMessage, session, user, imgId);
-                break;
-            case EDIT_ACTION:
-                handleEditActionMessage(imgEditRequestMessage, session, user, imgId);
-                break;
-            case END_EDIT:
-                handleEndEditMessage(imgEditRequestMessage, session, user, imgId);
-                break;
-            default:
-                // 默认构造响应，返回错误提示给当前 session 用户
-                ImageEditResponseMessage imgEditResponseMessage = new ImageEditResponseMessage();
-                imgEditResponseMessage.setMsgType(ImageEditMessageTypeEnum.ERROR.getVal());
-                imgEditResponseMessage.setMessage("消息类型错误");
-                imgEditResponseMessage.setUser(userService.getUserVO(user));
-                session.sendMessage(new TextMessage(JSONUtil.toJsonStr(imgEditResponseMessage)));
-        }
+        // 直接将操作消息交给生产者，生产者生产消息到 Disruptor 环形队列中
+        imgEditEventProducer.publishEvent(imgEditRequestMessage, session, user, imgId);
     }
 
     /**
@@ -199,6 +188,7 @@ public class ImageEditHandler extends TextWebSocketHandler {
      */
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
+        super.afterConnectionClosed(session, status);
         Map<String, Object> attributes = session.getAttributes();
         Long imgId = (Long) attributes.get("imgId");
         User user = (User) attributes.get("user");
