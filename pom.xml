@@ -169,7 +169,6 @@
                 <version>${spring-boot.version}</version>
                 <configuration>
                     <mainClass>com.ygyin.coop.CoopBackendApplication</mainClass>
-                    <skip>true</skip>
                 </configuration>
                 <executions>
                     <execution>
